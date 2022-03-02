@@ -1,5 +1,4 @@
 from imutils import face_utils
-import imutils
 import dlib
 import cv2
 import os
@@ -8,7 +7,7 @@ import os
 class Detector:
     def __init__(self):
         self.detector = dlib.get_frontal_face_detector()
-        self.predictor = dlib.shape_predictor('files/shape_predictor.dat')
+        self.predictor = dlib.shape_predictor('./files/shape_predictor.dat')
 
     def get_image(self, image):
         # self.cropped_image = imutils.resize(image, width=500)
@@ -47,8 +46,8 @@ class Detector:
         cv2.imshow('Landmarks Detector: the result', self.new_image)
         cv2.waitKey(0)
 
-    def save(self):
-        cv2.imwrite('files/processed_face.jpg', self.new_image)
+    def save(self, path):
+        cv2.imwrite(path, self.new_image)
 
 
 def track_face(path=0):
@@ -62,7 +61,7 @@ def track_face(path=0):
             det.detect_landmarks()
             det.visualize_landmarks()
             frame = det.new_image
-        cv2.imshow('frame', frame)
+        cv2.imshow('Video with box and landmarks', frame)
         if cv2.waitKey(1) != -1:
             break
     video.release()

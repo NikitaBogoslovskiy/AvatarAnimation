@@ -1,0 +1,53 @@
+import pickle
+import numpy as np
+
+
+def generate(path, num_samples):
+    with open('./files/generic_model.pkl', 'rb') as f:
+        data = pickle.load(f, encoding='latin1')
+    shape_expr_basis = data['shapedirs']
+    pose_basis = data['posedirs']
+    neutral_face = data['v_template']
+    surfaces = data['f']
+
+    num_coordinates = len(neutral_face)
+    num_shape_params = 300
+    num_expr_params = len(shape_expr_basis[0][0]) - num_shape_params
+    num_pose_params = len(pose_basis[0][0])
+
+    dataset = dict()
+    dataset['coordinates'] = np.zeros((num_samples, num_coordinates, 3))
+    dataset['shape_params'] = np.zeros((num_samples, num_shape_params, 1))
+    dataset['expr_params'] = np.zeros((num_samples, num_expr_params, 1))
+    dataset['pose_params'] = np.zeros((num_samples, num_pose_params, 1))
+    dataset['shape_expr_basis'] = shape_expr_basis
+    dataset['pose_basis'] = pose_basis
+    dataset['neutral_face'] = neutral_face
+    dataset['surfaces'] = surfaces
+
+    print('Generating dataset...')
+    for i in range(num_samples):
+        expr_coefs1 = np.zeros((num_shape_params + num_expr_params, 1))
+        expr_coefs1[num_shape_params:] = np.random.rand(num_expr_params, 1) * 4.2 - 2.1
+        expr_coefs2 = np.random.rand(num_pose_params, 1) * (np.pi / 8)
+        shape_expr = np.dot(shape_expr_basis.reshape((num_coordinates * 3, num_shape_params + num_expr_params)),
+                            expr_coefs1)
+        pose = np.dot(pose_basis.reshape((num_coordinates * 3, num_pose_params)), expr_coefs2)
+        vertices = shape_expr.reshape(-1, 3) + pose.reshape(-1, 3) + neutral_face
+
+        dataset['coordinates'][i] = vertices
+        dataset['shape_params'][i] = expr_coefs1[:num_shape_params]
+        dataset['expr_params'][i] = expr_coefs1[num_shape_params:]
+        dataset['pose_params'][i] = expr_coefs2
+
+        if (i + 1) % 1000 == 0:
+            print(f'{i + 1}/{num_samples}')
+
+    print(f'Saving dataset to "{path}"...')
+    with open(path, 'wb') as f:
+        pickle.dump(dataset, f)
+    print('Dataset has been created and saved successfully!')
+
+
+if __name__ == '__main__':
+    pass

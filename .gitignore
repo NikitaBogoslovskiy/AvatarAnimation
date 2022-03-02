@@ -1,4 +1,6 @@
-/.git/*
-/.idea/*
-/__pycache__/*
+.git/*
+.idea/*
+__pycache__
 /venv/*
+/files/*
+!/files/files_link.txt
