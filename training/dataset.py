@@ -3,7 +3,7 @@ import numpy as np
 
 
 def generate(path, num_samples):
-    with open('./files/generic_model.pkl', 'rb') as f:
+    with open('files/generic_model.pkl', 'rb') as f:
         data = pickle.load(f, encoding='latin1')
     shape_expr_basis = data['shapedirs']
     pose_basis = data['posedirs']

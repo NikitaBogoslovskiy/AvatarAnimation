@@ -5,12 +5,13 @@ import os
 import pickle
 import numpy as np
 import plotly.graph_objects as go
+import torch
 
 
 class Detector:
     def __init__(self):
         self.detector = dlib.get_frontal_face_detector()
-        self.predictor = dlib.shape_predictor('./files/shape_predictor.dat')
+        self.predictor = dlib.shape_predictor('files/shape_predictor.dat')
 
     def get_image(self, image):
         # self.cropped_image = imutils.resize(image, width=500)
@@ -79,10 +80,17 @@ def load_mesh_landmarks(path):
     return indices, coordinates
 
 
-def meshes_to_landmarks(vertices, surfaces, indices, coordinates):
+def meshes_to_landmarks_numpy(vertices, surfaces, indices, coordinates):
     lm_faces = np.take_along_axis(surfaces, indices[:, None], 0).reshape(153, 1)
     lm_faces_coords = np.take_along_axis(vertices, lm_faces[None, :], 1).reshape(-1, 51, 3, 3)
     lm_coords = np.einsum('ij,lijk->lik', coordinates, lm_faces_coords)
+    return lm_coords
+
+
+def meshes_to_landmarks_torch(vertices, surfaces, indices, coordinates):
+    lm_faces = torch.take_along_dim(surfaces, indices[:, None], dim=0).reshape(153, 1)
+    lm_faces_coords = torch.take_along_dim(vertices, lm_faces[None, :], dim=1).reshape(-1, 51, 3, 3)
+    lm_coords = torch.einsum('ij,lijk->lik', coordinates, lm_faces_coords)
     return lm_coords
 
 

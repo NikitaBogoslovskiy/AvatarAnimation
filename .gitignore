@@ -4,3 +4,4 @@ __pycache__
 /venv/*
 /files/*
 !/files/files_link.txt
+/output
