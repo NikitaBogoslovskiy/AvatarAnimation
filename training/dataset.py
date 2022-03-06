@@ -2,7 +2,7 @@ import pickle
 import numpy as np
 
 
-def generate(path, num_samples):
+def generate(path, num_samples, expr_bound=2.3, pose_bound=(np.pi/6)):
     with open('files/generic_model.pkl', 'rb') as f:
         data = pickle.load(f, encoding='latin1')
     shape_expr_basis = data['shapedirs']
@@ -28,8 +28,8 @@ def generate(path, num_samples):
     print('Generating dataset...')
     for i in range(num_samples):
         expr_coefs1 = np.zeros((num_shape_params + num_expr_params, 1))
-        expr_coefs1[num_shape_params:] = np.random.rand(num_expr_params, 1) * 4.2 - 2.1
-        expr_coefs2 = np.random.rand(num_pose_params, 1) * (np.pi / 8)
+        expr_coefs1[num_shape_params:] = np.random.rand(num_expr_params, 1) * expr_bound * 2 - expr_bound
+        expr_coefs2 = np.random.rand(num_pose_params, 1) * pose_bound
         shape_expr = np.dot(shape_expr_basis.reshape((num_vertices * 3, num_shape_params + num_expr_params)),
                             expr_coefs1)
         pose = np.dot(pose_basis.reshape((num_vertices * 3, num_pose_params)), expr_coefs2)
