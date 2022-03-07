@@ -50,8 +50,10 @@ def generate(path, num_samples, expr_bound=2.3, pose_bound=(np.pi/6)):
 
 
 def load(path):
+    print(f'Uploading dataset...')
     with open(path, 'rb') as f:
         dataset = pickle.load(f)
+    print(f'Dataset has been uploaded successfully')
     return dataset
 
 
