@@ -6,7 +6,7 @@ class IKModel(nn.Module):
     def __init__(self):
         super(IKModel, self).__init__()
         self.left_eye = nn.Sequential(
-            nn.Linear(33, 256),
+            nn.Linear(22, 256),
             nn.BatchNorm1d(256),
             nn.LeakyReLU(),
             nn.Linear(256, 512),
@@ -21,7 +21,7 @@ class IKModel(nn.Module):
             nn.Linear(256, 136)
         )
         self.right_eye = nn.Sequential(
-            nn.Linear(33, 256),
+            nn.Linear(22, 256),
             nn.BatchNorm1d(256),
             nn.LeakyReLU(),
             nn.Linear(256, 512),
@@ -36,7 +36,7 @@ class IKModel(nn.Module):
             nn.Linear(256, 136)
         )
         self.nose_mouth = nn.Sequential(
-            nn.Linear(87, 256),
+            nn.Linear(58, 256),
             nn.BatchNorm1d(256),
             nn.LeakyReLU(),
             nn.Linear(256, 512),
@@ -52,9 +52,9 @@ class IKModel(nn.Module):
         )
 
     def forward(self, left_eye, right_eye, nose_mouth):
-        le_reshaped = left_eye.reshape(-1, 33)
-        re_reshaped = right_eye.reshape(-1, 33)
-        nm_reshaped = nose_mouth.reshape(-1, 87)
+        le_reshaped = left_eye.reshape(-1, 22)
+        re_reshaped = right_eye.reshape(-1, 22)
+        nm_reshaped = nose_mouth.reshape(-1, 58)
         le_params = self.left_eye(le_reshaped)
         re_params = self.right_eye(re_reshaped)
         nm_params = self.nose_mouth(nm_reshaped)

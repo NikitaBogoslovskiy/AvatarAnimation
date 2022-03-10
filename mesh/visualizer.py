@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 class Visualizer:
-    def __init__(self, resolution=(1024, 1024)):
+    def __init__(self, resolution=(512, 512)):
         plt.rcParams["figure.figsize"] = [8, 8]
         camera = pyrender.PerspectiveCamera(yfov=np.pi / 29.0)
         light = pyrender.DirectionalLight(color=[255, 247, 207], intensity=10)

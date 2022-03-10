@@ -6,6 +6,7 @@ import pickle
 import numpy as np
 import plotly.graph_objects as go
 import torch
+import matplotlib.pyplot as plt
 
 
 class Detector:
@@ -17,7 +18,7 @@ class Detector:
         # self.cropped_image = imutils.resize(image, width=500)
         self.cropped_image = image
         self.gray_image = cv2.cvtColor(self.cropped_image, cv2.COLOR_BGR2GRAY)
-        self.corrected_image = self.gray_image
+        self.corrected_image = image  # self.gray_image
 
     def load_image(self, path):
         if not os.path.exists(path):
@@ -28,14 +29,15 @@ class Detector:
     def detect_face(self):
         rects = self.detector(self.corrected_image, 1)
         if len(rects) == 0:
-            return False
+            return False, None
         else:
             self.rect = rects[0]
-            return True
+            return True, self.rect
 
     def detect_landmarks(self):
         shape = self.predictor(self.corrected_image, self.rect)
         self.landmarks = face_utils.shape_to_np(shape)[17:]
+        return self.landmarks
 
     def visualize_box(self):
         self.new_image = self.cropped_image.copy()
@@ -43,8 +45,8 @@ class Detector:
         cv2.rectangle(self.new_image, (x, y), (x + w, y + h), (0, 255, 0), 1)
 
     def visualize_landmarks(self):
-        for xy in self.landmarks:
-            cv2.circle(self.new_image, xy, 1, (0, 0, 255), -1)
+        for x, y in self.landmarks:
+            cv2.circle(self.new_image, (x, y), 1, (0, 0, 255), -1)
 
     def show(self):
         cv2.imshow('Landmarks Detector: the result', self.new_image)
@@ -138,14 +140,21 @@ def draw(vertices, left_eye, right_eye, noses_mouth):
         ],
         layout=dict(
             scene=dict(
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
-                zaxis=dict(visible=False)
+                xaxis=dict(visible=True),
+                yaxis=dict(visible=True),
+                zaxis=dict(visible=True)
             )
         )
     )
     fig.show()
 
 
-if __name__ == '__main__':
-    pass
+def draw_it(vertices, puc):
+    plt.rcParams["figure.figsize"] = [8, 8]
+    colors = np.resize(np.zeros_like(vertices), (51, 3))
+    colors[:] = np.array([0, 220, 0]) / 256
+    colors2 = np.resize(np.zeros_like(puc), (51, 3))
+    colors2[:] = np.array([220, 0, 0]) / 256
+    plt.scatter(vertices[:, 0], vertices[:, 1], c=colors)
+    #plt.scatter(puc[:, 0], puc[:, 1], c=colors2)
+    plt.show()
