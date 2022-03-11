@@ -71,15 +71,15 @@ class ModelWrapper:
 
         self.model = IKModel()
         self.model.apply(init_weights)
-        opt = torch.optim.Adam(self.model.parameters(), lr=1e-3)
+        opt = torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=0)
         decayRate = 0.98
         lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=opt, gamma=decayRate)
-        noise_coef = 1e-4
-
+        noise_coef = 1e-3
+        reg = 5e-4
         # Training
         for i in range(0, num_train, batch_size):
             noise = torch.rand((batch_size, 51, 3)) * noise_coef
-            noise[:, :, 2] = 0
+            # noise[:, :, 2] = 0
             left_eyes = self.new_data['left_eyes'][i:i + batch_size] + noise[:, :11, :2]
             right_eyes = self.new_data['right_eyes'][i:i + batch_size] + noise[:, 11:22, :2]
             noses_mouths = self.new_data['noses_mouths'][i:i + batch_size] + noise[:, 22:51, :2]
@@ -93,13 +93,14 @@ class ModelWrapper:
             vertices = neutral_face + shape_expr + pose
             new_lm_coordinates = landmarks.meshes_to_landmarks_torch(vertices, self.new_data['surfaces'],
                                                                      self.new_data['indices'], self.new_data['coordinates'])
-            loss = torch.sum(torch.abs(new_lm_coordinates - landmark_coordinates)) / batch_size
+            loss_part = torch.sum(torch.abs(new_lm_coordinates - landmark_coordinates)) / batch_size
+            loss = loss_part + reg * torch.sqrt(torch.sum(result * result))
             loss.backward()
             opt.step()
             if i % 20000 == 0:
                 lr_scheduler.step()
             opt.zero_grad()
-            print(f'{i + batch_size}/{num_samples}: loss = {loss}')
+            print(f'{i + batch_size}/{num_samples}: loss = {loss_part}')
 
         # Test
         loss_history = []
@@ -122,8 +123,9 @@ class ModelWrapper:
             vertices = neutral_face + shape_expr + pose
             new_lm_coordinates = landmarks.meshes_to_landmarks_torch(vertices, self.new_data['surfaces'],
                                                                      self.new_data['indices'], self.new_data['coordinates'])
-            loss = torch.sum(torch.abs(new_lm_coordinates - landmark_coordinates)) / batch_size
-            loss_history.append(loss)
+            loss_part = torch.sum(torch.abs(new_lm_coordinates - landmark_coordinates)) / batch_size
+            loss = loss_part + reg * torch.sqrt(torch.sum(result * result))
+            loss_history.append(loss_part)
             if i == num_train:
                 old_faces = self.data['vertices'][old_faces_indices]
                 new_faces = vertices[new_faces_indices].detach().numpy()
@@ -147,8 +149,8 @@ class ModelWrapper:
 
     def execute(self, left_eyes, right_eyes, noses_mouths):
         result = self.model(left_eyes, right_eyes, noses_mouths)
-        expr_params = torch.clip(result[:, :100], min=-1.72, max=1.72)
-        pose_params = torch.clip(result[:, 100:], min=-np.pi/14.6, max=np.pi/14.6)
+        expr_params = torch.clip(result[:, :100], min=-1.95, max=1.95)
+        pose_params = torch.clip(result[:, 100:], min=-np.pi/13, max=np.pi/13)
         # batch_size = len(expr_params)
         shape_params = self.release_data['shape_params'][None, :, 0]  # .repeat(batch_size, 1)
         neutral_face = self.release_data['neutral_face'][None, :]  # .repeat(batch_size, 1, 1)

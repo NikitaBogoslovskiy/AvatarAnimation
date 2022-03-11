@@ -18,6 +18,7 @@ class Visualizer:
                                 [0, 0, 0, 1]])
         self.r = pyrender.OffscreenRenderer(*resolution)
         start_image, _ = self.r.render(self.scene)
+        plt.suptitle('Animated avatar', fontsize=16)
         axes = plt.subplot(111)
         self.image = axes.imshow(start_image)
         plt.ion()
@@ -39,4 +40,8 @@ class Visualizer:
         else:
             plt.pause(pause)
         self.scene.remove_node(obj)
+
+    def release(self):
+        plt.ioff()
+        plt.close()
 

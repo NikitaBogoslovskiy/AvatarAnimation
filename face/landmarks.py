@@ -16,10 +16,12 @@ class Detector:
         self.predictor = dlib.shape_predictor('files/shape_predictor.dat')
 
     def get_image(self, image):
-        self.cropped_image = imutils.resize(image, width=500)
+        self.cropped_image = image
+        # self.cropped_image = imutils.resize(image, width=500)
         # self.cropped_image = image
         self.gray_image = cv2.cvtColor(self.cropped_image, cv2.COLOR_BGR2GRAY)
         self.corrected_image = self.gray_image
+        self.new_image = self.cropped_image.copy()
 
     def load_image(self, path):
         if not os.path.exists(path):
@@ -37,17 +39,16 @@ class Detector:
 
     def detect_landmarks(self):
         shape = self.predictor(self.corrected_image, self.rect)
-        self.landmarks = face_utils.shape_to_np(shape)[17:]
+        self.landmarks = face_utils.shape_to_np(shape)
         return self.landmarks
 
     def visualize_box(self):
-        self.new_image = self.cropped_image.copy()
         x, y, w, h = face_utils.rect_to_bb(self.rect)
         cv2.rectangle(self.new_image, (x, y), (x + w, y + h), (0, 255, 0), 1)
 
     def visualize_landmarks(self):
-        for x, y in self.landmarks:
-            cv2.circle(self.new_image, (x, y), 1, (0, 0, 255), -1)
+        for x, y in self.landmarks[17:]:
+            cv2.circle(self.new_image, (x, y), 2, (0, 0, 255), -1)
 
     def show(self):
         cv2.imshow('Landmarks Detector: the result', self.new_image)
@@ -157,5 +158,5 @@ def draw_it(vertices, puc):
     colors2 = np.resize(np.zeros_like(puc), (51, 3))
     colors2[:] = np.array([220, 0, 0]) / 256
     plt.scatter(vertices[:, 0], vertices[:, 1], c=colors)
-    #plt.scatter(puc[:, 0], puc[:, 1], c=colors2)
+    plt.scatter(puc[:, 0], puc[:, 1], c=colors2)
     plt.show()

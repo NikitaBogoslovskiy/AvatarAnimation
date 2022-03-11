@@ -6,37 +6,33 @@ import numpy as np
 from model.wrapper import ModelWrapper
 from mesh.visualizer import Visualizer
 import queue
+import keyboard
+import matplotlib.pyplot as plt
 
 
-def rotate_lm_coordinates(lms):
-    lms -= lms[13]
-    p1 = lms[10]
-    p2 = lms[13]
-    p3 = np.array([0, p1[1]])
-    catet1 = np.sqrt(np.square(p1 - p3).sum())
-    catet2 = np.sqrt(np.square(p2 - p3).sum())
-    hypo = np.sqrt(catet1 ** 2 + catet2 ** 2)
-    sina = catet1 / hypo
-    cosa = catet2 / hypo
-    s = 0
-    if p1[0] > p2[0]:
-        s = 1
+def convert_lm_coordinates(lms):
+    lms[:, 1] *= -1
+    lms = lms.astype('float32')
+    middle = (lms[2] + lms[14]) / 2
+    lms[:] -= middle
+    right = np.array([lms[14, 0], 0])
+    unit_vector1 = right / np.linalg.norm(right)
+    unit_vector2 = lms[14] / np.linalg.norm(lms[14])
+    dot_product = np.dot(unit_vector1, unit_vector2)
+    angle = np.arccos(dot_product)
+    cosa = np.cos(angle)
+    sina = np.sin(angle)
+    z = 0
+    if lms[14, 1] > 0:
+        z = 1
     else:
-        s = -1
-    mat = np.array([[cosa, s * sina], [-s * sina, cosa]])
-    return np.dot(lms, mat)
-
-
-def convert_lm_coordinates(rect, lms):
-    rect_x, rect_y, w, h = face_utils.rect_to_bb(rect)
-    new_lms = np.zeros((len(lms), 2))
-    for i in range(len(lms)):
-        lm_x, lm_y = lms[i]
-        lm_x -= rect_x
-        lm_y -= rect_y
-        new_lms[i, 0] = (lm_x - w/2) / (w * 7)
-        new_lms[i, 1] = (-lm_y + h/2) / (h * 7)
-    return new_lms
+        z = -1
+    rotate_matrix = np.array([[cosa, z * sina], [-z * sina, cosa]])
+    rotated_lms = np.dot(rotate_matrix, lms.transpose()).transpose()
+    width = rotated_lms[14, 0] - rotated_lms[2, 0]
+    scaled_rotated_lms = rotated_lms / (width * 8)
+    scaled_rotated_lms[:, 1] -= 0.008
+    return scaled_rotated_lms
 
 
 class Animation:
@@ -50,26 +46,30 @@ class Animation:
         self.vis.set_surfaces(self.model.release_data['surfaces'])
         self.lm_history = queue.Queue()
         self.lm_sum = np.zeros((51, 2))
-        self.lm_counter = Counter(0)
+        self.lm_counter = 2
 
     def capture_neutral_face(self):
         while True:
             ret, frame = self.video.read()
-            cv2.imshow('Output window', frame)
+            self.det.get_image(frame)
+            b, rect = self.det.detect_face()
+            if b:
+                self.det.visualize_box()
+            cv2.imshow('Press "Enter" to capture neutral face', self.det.new_image)
             if cv2.waitKey(1) == 13:
                 self.det.get_image(frame)
                 b, rect = self.det.detect_face()
                 if b:
                     lms = self.det.detect_landmarks()
-                    new_lms = convert_lm_coordinates(rect, lms)
-                    new_rot_lms = rotate_lm_coordinates(new_lms)
+                    new_lms = convert_lm_coordinates(lms)
                     # le = self.model.release_data['left_eye'][0]
                     # re = self.model.release_data['right_eye'][0]
                     # nm = self.model.release_data['nose_mouth'][0]
                     # puc = torch.cat([le, re, nm], axis=0)[:, :2].numpy()
-                    self.neutral_landmarks = new_rot_lms
-                    # lm.draw_it(new_rot_lms, puc)
+                    self.neutral_landmarks = new_lms[17:]
+                    # lm.draw_it(new_rot_lms[17:], puc)
                     # print(new_lms)
+                    cv2.destroyAllWindows()
                     break
 
     def animate_mesh(self):
@@ -79,19 +79,18 @@ class Animation:
             b, rect = self.det.detect_face()
             if b:
                 lms = self.det.detect_landmarks()
-                self.det.visualize_box()
+                # self.det.visualize_box()
                 self.det.visualize_landmarks()
-                new_lms = convert_lm_coordinates(rect, lms)
-                new_rot_lms = rotate_lm_coordinates(new_lms)
-                self.lm_history.put(new_rot_lms)
-                self.lm_sum += new_rot_lms
-                self.lm_counter.inc()
-                mean = new_rot_lms
-                if self.lm_counter.value > 3:
-                    self.lm_counter.turn_off()
+                new_lms = convert_lm_coordinates(lms)[17:]
+                self.lm_history.put(new_lms)
+                self.lm_sum += new_lms
+                mean = new_lms
+                if self.lm_counter == 0:
                     left = self.lm_history.get()
                     self.lm_sum -= left
-                    mean = self.lm_sum / 3
+                    mean = self.lm_sum / 2
+                else:
+                    self.lm_counter -= 1
                 diff = (mean - self.neutral_landmarks)
                 diff_l, diff_r, diff_nm = lm.divide_landmarks(diff[None, :])
                 diff_l_t = torch.Tensor(diff_l)
@@ -101,12 +100,13 @@ class Animation:
                 re = self.model.release_data['right_eye'] + diff_r_t
                 nm = self.model.release_data['nose_mouth'] + diff_nm_t
                 vertices = self.model.execute(le, re, nm)
-                cv2.imshow('Output window', self.det.new_image)
-                self.vis.render(vertices[0], pause=0.000001)
+                self.vis.render(vertices[0], pause=0.001)
+                cv2.imshow('Window for avatar manipulation', self.det.new_image)
                 if cv2.waitKey(1) == 27:
                     break
 
     def stop(self):
+        self.vis.release()
         self.video.release()
         cv2.destroyAllWindows()
 

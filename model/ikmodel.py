@@ -6,49 +6,58 @@ class IKModel(nn.Module):
     def __init__(self):
         super(IKModel, self).__init__()
         self.left_eye = nn.Sequential(
-            nn.Linear(22, 256),
-            nn.BatchNorm1d(256),
+            nn.Linear(22, 300),
+            nn.BatchNorm1d(300),
             nn.LeakyReLU(),
-            nn.Linear(256, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(300, 400),
+            nn.BatchNorm1d(400),
             nn.LeakyReLU(),
-            nn.Linear(512, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(400, 400),
+            nn.BatchNorm1d(400),
             nn.LeakyReLU(),
-            nn.Linear(512, 256),
-            nn.BatchNorm1d(256),
+            nn.Linear(400, 300),
+            nn.BatchNorm1d(300),
             nn.LeakyReLU(),
-            nn.Linear(256, 136)
+            # nn.Linear(512, 256),
+            # nn.BatchNorm1d(256),
+            # nn.LeakyReLU(),
+            nn.Linear(300, 136)
         )
         self.right_eye = nn.Sequential(
-            nn.Linear(22, 256),
-            nn.BatchNorm1d(256),
+            nn.Linear(22, 300),
+            nn.BatchNorm1d(300),
             nn.LeakyReLU(),
-            nn.Linear(256, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(300, 400),
+            nn.BatchNorm1d(400),
             nn.LeakyReLU(),
-            nn.Linear(512, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(400, 400),
+            nn.BatchNorm1d(400),
             nn.LeakyReLU(),
-            nn.Linear(512, 256),
-            nn.BatchNorm1d(256),
+            nn.Linear(400, 300),
+            nn.BatchNorm1d(300),
             nn.LeakyReLU(),
-            nn.Linear(256, 136)
+            # nn.Linear(512, 256),
+            # nn.BatchNorm1d(256),
+            # nn.LeakyReLU(),
+            nn.Linear(300, 136)
         )
         self.nose_mouth = nn.Sequential(
-            nn.Linear(58, 256),
-            nn.BatchNorm1d(256),
+            nn.Linear(58, 300),
+            nn.BatchNorm1d(300),
             nn.LeakyReLU(),
-            nn.Linear(256, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(300, 400),
+            nn.BatchNorm1d(400),
             nn.LeakyReLU(),
-            nn.Linear(512, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(400, 400),
+            nn.BatchNorm1d(400),
             nn.LeakyReLU(),
-            nn.Linear(512, 256),
-            nn.BatchNorm1d(256),
+            nn.Linear(400, 300),
+            nn.BatchNorm1d(300),
             nn.LeakyReLU(),
-            nn.Linear(256, 136)
+            # nn.Linear(512, 256),
+            # nn.BatchNorm1d(256),
+            # nn.LeakyReLU(),
+            nn.Linear(300, 136)
         )
 
     def forward(self, left_eye, right_eye, nose_mouth):
