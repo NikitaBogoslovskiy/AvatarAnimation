@@ -1,4 +1,5 @@
 from imutils import face_utils
+import imutils
 import dlib
 import cv2
 import os
@@ -15,10 +16,10 @@ class Detector:
         self.predictor = dlib.shape_predictor('files/shape_predictor.dat')
 
     def get_image(self, image):
-        # self.cropped_image = imutils.resize(image, width=500)
-        self.cropped_image = image
+        self.cropped_image = imutils.resize(image, width=500)
+        # self.cropped_image = image
         self.gray_image = cv2.cvtColor(self.cropped_image, cv2.COLOR_BGR2GRAY)
-        self.corrected_image = image  # self.gray_image
+        self.corrected_image = self.gray_image
 
     def load_image(self, path):
         if not os.path.exists(path):

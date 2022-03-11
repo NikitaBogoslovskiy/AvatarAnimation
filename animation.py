@@ -5,6 +5,7 @@ from imutils import face_utils
 import numpy as np
 from model.wrapper import ModelWrapper
 from mesh.visualizer import Visualizer
+import queue
 
 
 def rotate_lm_coordinates(lms):
@@ -47,6 +48,9 @@ class Animation:
         self.model.load_release_data()
         self.vis = Visualizer()
         self.vis.set_surfaces(self.model.release_data['surfaces'])
+        self.lm_history = queue.Queue()
+        self.lm_sum = np.zeros((51, 2))
+        self.lm_counter = Counter(0)
 
     def capture_neutral_face(self):
         while True:
@@ -79,7 +83,16 @@ class Animation:
                 self.det.visualize_landmarks()
                 new_lms = convert_lm_coordinates(rect, lms)
                 new_rot_lms = rotate_lm_coordinates(new_lms)
-                diff = (new_rot_lms - self.neutral_landmarks)
+                self.lm_history.put(new_rot_lms)
+                self.lm_sum += new_rot_lms
+                self.lm_counter.inc()
+                mean = new_rot_lms
+                if self.lm_counter.value > 3:
+                    self.lm_counter.turn_off()
+                    left = self.lm_history.get()
+                    self.lm_sum -= left
+                    mean = self.lm_sum / 3
+                diff = (mean - self.neutral_landmarks)
                 diff_l, diff_r, diff_nm = lm.divide_landmarks(diff[None, :])
                 diff_l_t = torch.Tensor(diff_l)
                 diff_r_t = torch.Tensor(diff_r)
@@ -89,10 +102,23 @@ class Animation:
                 nm = self.model.release_data['nose_mouth'] + diff_nm_t
                 vertices = self.model.execute(le, re, nm)
                 cv2.imshow('Output window', self.det.new_image)
-                self.vis.render(vertices[0], pause=0.01)
+                self.vis.render(vertices[0], pause=0.000001)
                 if cv2.waitKey(1) == 27:
                     break
 
     def stop(self):
         self.video.release()
         cv2.destroyAllWindows()
+
+
+class Counter:
+    def __init__(self, init):
+        self.value = init
+        self.possible = True
+
+    def inc(self):
+        if self.possible:
+            self.value += 1
+
+    def turn_off(self):
+        self.possible = False
