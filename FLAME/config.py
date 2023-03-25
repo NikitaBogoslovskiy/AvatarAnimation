@@ -85,13 +85,6 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    '--batch_size',
-    type = int,
-    default = 1,
-    help = 'Training batch size.'
-)
-
-parser.add_argument(
     '--ring_margin',
     type = float,
     default = 0.5,
@@ -105,6 +98,13 @@ parser.add_argument(
     help = 'weight on ring loss.'
 )
 
-def get_config():
+
+def get_config(batch_size=1):
+    parser.add_argument(
+        '--batch_size',
+        type=int,
+        default=batch_size,
+        help='Training batch size.'
+    )
     config = parser.parse_args()
     return config
