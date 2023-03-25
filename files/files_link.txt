@@ -1,4 +1,0 @@
-Other necessary files are located here:
-https://drive.google.com/drive/folders/1QJj4WWapZh6IXSXznlW7LBotV1ttztBB?usp=share_link
-
-In order to use these files add them to the folder "files".
