@@ -4,6 +4,7 @@ from FLAME.FLAME import FLAME as flame
 import pyrender
 import trimesh
 from FLAME.config import get_config
+from utils.landmarks import divide_landmarks
 
 
 RADIAN = np.pi / 180.0
@@ -46,12 +47,35 @@ class FlameModel:
             scene.add(processed_landmarks_pcl)
         pyrender.Viewer(scene, use_raymond_lighting=True)
 
+    def draw_with_divided_landmarks(self, vertices, left_eye, right_eye, nose_mouth):
+        processed_vertices = vertices.detach().cpu().numpy().squeeze()
+        processed_left_eye = left_eye.detach().cpu().numpy().squeeze()
+        processed_right_eye = right_eye.detach().cpu().numpy().squeeze()
+        processed_nose_mouth = nose_mouth.detach().cpu().numpy().squeeze()
+        vertex_colors = np.ones([processed_vertices.shape[0], 4]) * [0.3, 0.3, 0.3, 1.0]
+        tri_mesh = trimesh.Trimesh(processed_vertices, self.flamelayer.faces,
+                                   vertex_colors=vertex_colors)
+        mesh = pyrender.Mesh.from_trimesh(tri_mesh)
+        scene = pyrender.Scene()
+        scene.add(mesh)
+        landmark_parts_coordinates = [processed_left_eye, processed_right_eye, processed_nose_mouth]
+        landmark_parts_colors = [[0.9, 0.1, 0.1, 1.0], [0.1, 0.9, 0.1, 1.0], [0.1, 0.1, 0.9, 1.0]]
+        for i in range(3):
+            sm = trimesh.creation.uv_sphere(radius=0.002)
+            sm.visual.vertex_colors = landmark_parts_colors[i]
+            tfs = np.tile(np.eye(4), (len(landmark_parts_coordinates[i]), 1, 1))
+            tfs[:, :3, 3] = landmark_parts_coordinates[i]
+            landmarks_part_pcl = pyrender.Mesh.from_trimesh(sm, poses=tfs)
+            scene.add(landmarks_part_pcl)
+        pyrender.Viewer(scene, use_raymond_lighting=True)
+
 
 if __name__ == "__main__":
-    fm = FlameModel(get_config())
-    shape_params = torch.zeros(1, 100).cuda()  # 35, 45, 90, 0..30, -4..5, -6..8
-    pose_params_numpy = np.array([[0, 0, 0, 25 * RADIAN, 0 * RADIAN, 0 * RADIAN]], dtype=np.float32)
-    pose_params = torch.tensor(pose_params_numpy, dtype=torch.float32).cuda()
-    expression_params = torch.zeros(1, 50, dtype=torch.float32).cuda()
-    v, l = fm.generate(shape_params, pose_params, expression_params)
-    fm.draw(v, l)
+    pass
+    # fm = FlameModel(get_config())
+    # shape_params = torch.zeros(1, 100).cuda()  # 35, 45, 90, 0..30, -4..5, -6..8
+    # pose_params_numpy = np.array([[0, 0, 0, 25 * RADIAN, 0 * RADIAN, 0 * RADIAN]], dtype=np.float32)
+    # pose_params = torch.tensor(pose_params_numpy, dtype=torch.float32).cuda()
+    # expression_params = torch.zeros(1, 50, dtype=torch.float32).cuda()
+    # v, l = fm.generate(shape_params, pose_params, expression_params)
+    # fm.draw(v, l)

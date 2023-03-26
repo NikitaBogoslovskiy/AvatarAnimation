@@ -4,6 +4,7 @@ import json
 from FLAME.config import get_config
 from progress.bar import Bar
 from FLAME.flame_model import RADIAN
+from utils.landmarks import divide_landmarks
 
 JAW_ARTICULATION_PROBABILITY = 0.3
 
@@ -48,6 +49,9 @@ class Dataset:
         pose[:, 3:] *= (torch.rand(num_items, 1) < JAW_ARTICULATION_PROBABILITY).repeat(1, 3)
         expr = torch.rand(num_items, model.config.expression_params) * (params.expr_max - params.expr_min)\
                       + params.expr_min
+        shape[0, :] = 0
+        pose[0, :] = 0
+        expr[0, :] = 0
         if cuda:
             shape = shape.cuda()
             pose = pose.cuda()
@@ -61,9 +65,15 @@ class Dataset:
             processed_vertices = vertices.detach().cpu().numpy().squeeze().tolist()
             processed_landmarks = landmarks.detach().cpu().numpy().squeeze().tolist()
             for local_item_idx in range(batch_size):
+                if global_item_idx == 0:
+                    Dataset.save(f"{params.save_folder}/neutral.json",
+                                 processed_vertices[local_item_idx], processed_landmarks[local_item_idx])
+                else:
+                    Dataset.save(f"{params.save_folder}/{global_item_idx}.json",
+                                 processed_vertices[local_item_idx], processed_landmarks[local_item_idx])
+                # le, re, nm = divide_landmarks(landmarks[local_item_idx])
                 # model.draw(vertices[local_item_idx], landmarks[local_item_idx])
-                Dataset.save(f"{params.save_folder}/{global_item_idx}.json",
-                             processed_vertices[local_item_idx], processed_landmarks[local_item_idx])
+                # model.draw_with_divided_landmarks(vertices[local_item_idx], le, re, nm)
                 bar.next()
                 global_item_idx += 1
         bar.finish()
@@ -72,10 +82,9 @@ class Dataset:
 
 if __name__ == "__main__":
     p = DatasetParams(save_folder="train_data",
-                      num_samples=10,
-                      expr_min=-2.0,
-                      expr_max=2.0,
+                      num_samples=10000,
+                      expr_min=-2.5,
+                      expr_max=2.5,
                       jaw_min=torch.Tensor([0.0 * RADIAN, -2.0 * RADIAN, -3.0 * RADIAN]),
                       jaw_max=torch.Tensor([25.0 * RADIAN, 3.0 * RADIAN, 4.0 * RADIAN]))
     Dataset.generate(p)
-    # v, l = Dataset.upload("train_data/0.json")
