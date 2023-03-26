@@ -160,3 +160,4 @@ cython_debug/
 .idea/
 
 train_data/*
+!train_data/.gitkeep
