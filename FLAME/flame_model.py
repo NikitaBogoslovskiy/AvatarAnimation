@@ -1,18 +1,18 @@
 import numpy as np
 import torch
-from FLAME import FLAME
+from FLAME.FLAME import FLAME as flame
 import pyrender
 import trimesh
-from config import get_config
+from FLAME.config import get_config
 
 
 RADIAN = np.pi / 180.0
 
 
 class FlameModel:
-    def __init__(self, config, cuda=True):
-        self.config = config
-        self.flamelayer = FLAME(config)
+    def __init__(self, configuration, cuda=True):
+        self.config = configuration
+        self.flamelayer = flame(self.config)
         self.cuda = cuda
         if self.cuda:
             self.flamelayer.cuda()
@@ -40,6 +40,7 @@ class FlameModel:
             sm = trimesh.creation.uv_sphere(radius=0.002)
             sm.visual.vertex_colors = [0.9, 0.1, 0.1, 1.0]
             tfs = np.tile(np.eye(4), (len(processed_landmarks), 1, 1))
+            # processed_landmarks[:, 2] = 0
             tfs[:, :3, 3] = processed_landmarks
             processed_landmarks_pcl = pyrender.Mesh.from_trimesh(sm, poses=tfs)
             scene.add(processed_landmarks_pcl)
@@ -48,8 +49,8 @@ class FlameModel:
 
 if __name__ == "__main__":
     fm = FlameModel(get_config())
-    shape_params = torch.zeros(1, 100).cuda()
-    pose_params_numpy = np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float32)
+    shape_params = torch.zeros(1, 100).cuda()  # 35, 45, 90, 0..30, -4..5, -6..8
+    pose_params_numpy = np.array([[0, 0, 0, 25 * RADIAN, 0 * RADIAN, 0 * RADIAN]], dtype=np.float32)
     pose_params = torch.tensor(pose_params_numpy, dtype=torch.float32).cuda()
     expression_params = torch.zeros(1, 50, dtype=torch.float32).cuda()
     v, l = fm.generate(shape_params, pose_params, expression_params)
