@@ -35,17 +35,56 @@ class VideoModelTrainParams:
         self.weight_decay = weight_decay
 
 
+class VideoModelExecuteParams:
+    def __init__(self,
+                 left_eye,
+                 right_eye,
+                 nose_mouth):
+        self.left_eye = left_eye
+        self.right_eye = right_eye
+        self.nose_mouth = nose_mouth
+
+
 class VideoModel:
     def __init__(self, cuda=True):
         self.cuda = cuda
-        self.model = None
+        self.initialized_for_execution = False
+        self.torch_model = None
+        self.flame_model = None
+        self.default_shape = None
+        self.default_position = None
+
+    def load_model(self, weights_path):
+        self.torch_model = VideoModelPyTorch()
+        self.torch_model.load_state_dict(torch.load(weights_path))
+        self.torch_model.eval()
+
+    def init_for_execution(self, batch_size):
+        self.flame_model = FlameModel(get_config(batch_size), self.cuda)
+        self.default_shape = torch.zeros(batch_size, 100)
+        self.default_position = torch.zeros(batch_size, 3)
+        if self.cuda:
+            self.default_shape = self.default_shape.cuda()
+            self.default_position = self.default_position.cuda()
+        self.initialized_for_execution = True
+
+    def execute(self, params: VideoModelExecuteParams):
+        if self.torch_model is None:
+            raise Exception("You cannot execute uninitialized model. Load the model.")
+        if not self.init_for_execution:
+            raise Exception("You have to call init_for_execution once before execution.")
+        output = self.torch_model(params.left_eye, params.right_eye, params.nose_mouth)
+        generated_vertices, _ = self.flame_model.generate(
+            self.default_shape, torch.cat([self.default_position, output[:, 50:]], dim=1), output[:, :50])
+        return generated_vertices.detach().cpu()
 
     def train(self, params: VideoModelTrainParams):
-        self.model = VideoModelPyTorch()
-        self.model.apply(init_weights)
+        if self.torch_model is None:
+            self.torch_model = VideoModelPyTorch()
+            self.torch_model.apply(init_weights)
         if self.cuda:
-            self.model.to(torch.device("cuda"))
-        flame_model = FlameModel(get_config(params.batch_size), self.cuda)
+            self.torch_model.to(torch.device("cuda"))
+        train_flame_model = FlameModel(get_config(params.batch_size), self.cuda)
 
         item_names = next(walk(params.dataset_path), (None, None, []))[2]
         random.shuffle(item_names)
@@ -54,7 +93,7 @@ class VideoModel:
         num_items = num_batches * params.batch_size
         num_train_batches = int(num_batches * params.train_percentage)
         num_test_batches = num_batches - num_train_batches
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=params.learning_rate, weight_decay=params.weight_decay)
+        optimizer = torch.optim.Adam(self.torch_model.parameters(), lr=params.learning_rate, weight_decay=params.weight_decay)
         lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=params.decay_rate)
         default_shape = torch.zeros(params.batch_size, 100)
         default_position = torch.zeros(params.batch_size, 3)
@@ -86,8 +125,8 @@ class VideoModel:
                     right_eyes = right_eyes.cuda()
                     noses_mouths = noses_mouths.cuda()
                 optimizer.zero_grad()
-                output = self.model(left_eyes, right_eyes, noses_mouths)
-                generated_vertices, _ = flame_model.generate(
+                output = self.torch_model(left_eyes, right_eyes, noses_mouths)
+                generated_vertices, _ = train_flame_model.generate(
                     default_shape, torch.cat([default_position, output[:, 50:]], dim=1), output[:, :50])
                 loss = torch.mean(torch.sum(torch.linalg.norm(origin_vertices - generated_vertices, dim=2), dim=1))
                 bar.set_loss(loss)
@@ -123,8 +162,8 @@ class VideoModel:
                 left_eyes = left_eyes.cuda()
                 right_eyes = right_eyes.cuda()
                 noses_mouths = noses_mouths.cuda()
-            output = self.model(left_eyes, right_eyes, noses_mouths)
-            generated_vertices, _ = flame_model.generate(
+            output = self.torch_model(left_eyes, right_eyes, noses_mouths)
+            generated_vertices, _ = train_flame_model.generate(
                 default_shape, torch.cat([default_position, output[:, 50:]], dim=1), output[:, :50])
             loss += torch.mean(torch.sum(torch.linalg.norm(origin_vertices - generated_vertices, dim=2), dim=1))
             bar.next(params.batch_size)
@@ -132,7 +171,7 @@ class VideoModel:
         print("Finished testing")
         print(f"Test loss = {loss / num_test_batches:.4f}")
 
-        torch.save(self.model.state_dict(),
+        torch.save(self.torch_model.state_dict(),
                    f"{params.output_weights_path}/video_model_{params.epoch_number}_"
                    f"{num_train_batches * params.batch_size}.pt")
         print(f"Model has been saved to {params.output_weights_path}")
