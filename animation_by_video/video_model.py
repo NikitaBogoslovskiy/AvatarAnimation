@@ -90,7 +90,7 @@ class VideoModel:
         random.shuffle(item_names)
         num_items = len(item_names)
         num_batches = num_items // params.batch_size
-        num_items = num_batches * params.batch_size
+        # num_items = num_batches * params.batch_size
         num_train_batches = int(num_batches * params.train_percentage)
         num_test_batches = num_batches - num_train_batches
         optimizer = torch.optim.Adam(self.torch_model.parameters(), lr=params.learning_rate, weight_decay=params.weight_decay)
