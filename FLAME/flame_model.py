@@ -27,7 +27,7 @@ class FlameModel:
             vertices, landmarks = self.flamelayer(shape, expression, pose, neck, eye)
         return vertices, landmarks
 
-    def draw(self, vertices, landmarks=None):
+    def _draw(self, vertices, landmarks=None):
         processed_vertices = vertices.detach().cpu().numpy().squeeze()
         if landmarks is not None:
             processed_landmarks = landmarks.detach().cpu().numpy().squeeze()
@@ -47,7 +47,7 @@ class FlameModel:
             scene.add(processed_landmarks_pcl)
         pyrender.Viewer(scene, use_raymond_lighting=True)
 
-    def draw_with_divided_landmarks(self, vertices, left_eye, right_eye, nose_mouth):
+    def _draw_with_divided_landmarks(self, vertices, left_eye, right_eye, nose_mouth):
         processed_vertices = vertices.detach().cpu().numpy().squeeze()
         processed_left_eye = left_eye.detach().cpu().numpy().squeeze()
         processed_right_eye = right_eye.detach().cpu().numpy().squeeze()

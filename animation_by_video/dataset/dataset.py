@@ -81,10 +81,11 @@ class Dataset:
 
 
 if __name__ == "__main__":
-    p = DatasetParams(save_folder="train_data",
-                      num_samples=10000,
-                      expr_min=-2.5,
-                      expr_max=2.5,
-                      jaw_min=torch.Tensor([0.0 * RADIAN, -2.0 * RADIAN, -3.0 * RADIAN]),
-                      jaw_max=torch.Tensor([25.0 * RADIAN, 3.0 * RADIAN, 4.0 * RADIAN]))
-    Dataset.generate(p)
+    pass
+    # p = DatasetParams(save_folder="train_data",
+    #                   num_samples=10000,
+    #                   expr_min=-2.5,
+    #                   expr_max=2.5,
+    #                   jaw_min=torch.Tensor([0.0 * RADIAN, -2.0 * RADIAN, -3.0 * RADIAN]),
+    #                   jaw_max=torch.Tensor([25.0 * RADIAN, 3.0 * RADIAN, 4.0 * RADIAN]))
+    # Dataset.generate(p)
