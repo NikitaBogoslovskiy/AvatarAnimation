@@ -161,3 +161,4 @@ cython_debug/
 
 animation_by_video/dataset/train_data/*
 !animation_by_video/dataset/train_data/.gitkeep
+animation_by_video/detector/shape_predictor.dat
