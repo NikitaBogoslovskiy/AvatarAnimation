@@ -3,4 +3,4 @@ class Animation:
         pass
 
     def process_neutral_face(self):
-        
+        pass

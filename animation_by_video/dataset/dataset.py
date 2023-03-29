@@ -45,10 +45,10 @@ class Dataset:
         shape = torch.zeros(num_items, model.config.shape_params)
         pose = torch.zeros(num_items, model.config.pose_params)
         pose[:, 3:] = torch.rand(num_items, 3) * (params.jaw_max - params.jaw_min).repeat(num_items, 1) \
-                             + params.jaw_min.repeat(num_items, 1)
+                      + params.jaw_min.repeat(num_items, 1)
         pose[:, 3:] *= (torch.rand(num_items, 1) < JAW_ARTICULATION_PROBABILITY).repeat(1, 3)
-        expr = torch.rand(num_items, model.config.expression_params) * (params.expr_max - params.expr_min)\
-                      + params.expr_min
+        expr = torch.rand(num_items, model.config.expression_params) * (params.expr_max - params.expr_min) \
+               + params.expr_min
         shape[0, :] = 0
         pose[0, :] = 0
         expr[0, :] = 0
@@ -61,7 +61,8 @@ class Dataset:
         for batch_idx in range(num_batches):
             start_idx = batch_idx * batch_size
             end_idx = start_idx + batch_size
-            vertices, landmarks = model.generate(shape[start_idx:end_idx], pose[start_idx:end_idx], expr[start_idx:end_idx])
+            vertices, landmarks = model.generate(shape[start_idx:end_idx], pose[start_idx:end_idx],
+                                                 expr[start_idx:end_idx])
             processed_vertices = vertices.detach().cpu().numpy().squeeze().tolist()
             processed_landmarks = landmarks.detach().cpu().numpy().squeeze().tolist()
             for local_item_idx in range(batch_size):
@@ -73,7 +74,7 @@ class Dataset:
                                  processed_vertices[local_item_idx], processed_landmarks[local_item_idx])
                 # le, re, nm = divide_landmarks(landmarks[local_item_idx])
                 # model.draw(vertices[local_item_idx], landmarks[local_item_idx])
-                # model.draw_with_divided_landmarks(vertices[local_item_idx], le, re, nm)
+                # model._draw_with_divided_landmarks(vertices[local_item_idx], le, re, nm)
                 bar.next()
                 global_item_idx += 1
         bar.finish()

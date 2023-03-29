@@ -179,17 +179,17 @@ class VideoModel:
 
 if __name__ == "__main__":
     pass
-    # params = VideoModelTrainParams(
-    #     dataset_path="C:/Content/Python/AvatarAnimation/animation_by_video/dataset/train_data",
-    #     output_weights_path="C:/Content/Python/AvatarAnimation/animation_by_video/weights",
-    #     train_percentage=0.95,
-    #     epoch_number=1,
-    #     batch_size=100,
-    #     learning_rate=1e-3,
-    #     decay_rate=0.98,
-    #     noise_level=1e-3,
-    #     regularization=5e-4,
-    #     weight_decay=0.0
-    # )
-    # video_model = VideoModel(cuda=True)
-    # video_model.train(params)
+    params = VideoModelTrainParams(
+        dataset_path="C:/Content/Python/AvatarAnimation/animation_by_video/dataset/train_data",
+        output_weights_path="C:/Content/Python/AvatarAnimation/animation_by_video/weights",
+        train_percentage=0.95,
+        epoch_number=1,
+        batch_size=100,
+        learning_rate=1e-3,
+        decay_rate=0.98,
+        noise_level=1e-3,
+        regularization=5e-4,
+        weight_decay=0.0
+    )
+    video_model = VideoModel(cuda=True)
+    video_model.train(params)

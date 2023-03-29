@@ -1,10 +1,7 @@
 import numpy as np
-import torch
 from FLAME.FLAME import FLAME as flame
 import pyrender
 import trimesh
-from FLAME.config import get_config
-from utils.landmarks import divide_landmarks
 
 
 RADIAN = np.pi / 180.0
@@ -52,7 +49,7 @@ class FlameModel:
         processed_left_eye = left_eye.detach().cpu().numpy().squeeze()
         processed_right_eye = right_eye.detach().cpu().numpy().squeeze()
         processed_nose_mouth = nose_mouth.detach().cpu().numpy().squeeze()
-        vertex_colors = np.ones([processed_vertices.shape[0], 4]) * [0.3, 0.3, 0.3, 1.0]
+        vertex_colors = np.ones([processed_vertices.shape[0], 4]) * [0.3, 0.3, 0.3, 0.1]
         tri_mesh = trimesh.Trimesh(processed_vertices, self.flamelayer.faces,
                                    vertex_colors=vertex_colors)
         mesh = pyrender.Mesh.from_trimesh(tri_mesh)
@@ -64,6 +61,7 @@ class FlameModel:
             sm = trimesh.creation.uv_sphere(radius=0.002)
             sm.visual.vertex_colors = landmark_parts_colors[i]
             tfs = np.tile(np.eye(4), (len(landmark_parts_coordinates[i]), 1, 1))
+            landmark_parts_coordinates[i][:, 2] = 0
             tfs[:, :3, 3] = landmark_parts_coordinates[i]
             landmarks_part_pcl = pyrender.Mesh.from_trimesh(sm, poses=tfs)
             scene.add(landmarks_part_pcl)

@@ -40,7 +40,7 @@ class Detector:
         cv2.rectangle(self.image, (x, y), (x + w, y + h), (0, 255, 0), 1)
 
     def visualize_landmarks(self):
-        for x, y in self.landmarks[17:]:
+        for x, y in self.landmarks[0:]:
             cv2.circle(self.image, (x, y), 2, (0, 0, 255), -1)
 
     def show(self):
@@ -60,7 +60,8 @@ class FaceTracker:
         while True:
             _, frame = video.read()
             self.detector.get_image(frame)
-            if self.detector.detect_face():
+            face_detected, _ = self.detector.detect_face()
+            if face_detected:
                 self.detector.visualize_bounding_box()
                 self.detector.detect_landmarks()
                 self.detector.visualize_landmarks()
