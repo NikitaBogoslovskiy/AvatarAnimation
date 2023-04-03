@@ -36,7 +36,7 @@ parser.add_argument(
 parser.add_argument(
     '--expression_params',
     type = int,
-    default = 50,
+    default = 100,
     help = 'the number of expression parameters'
 )
 
@@ -65,14 +65,14 @@ parser.add_argument(
 
 parser.add_argument(
     '--optimize_eyeballpose',
-    default = True, # False for For RingNet project
+    default = False, # False for For RingNet project
     type = bool,
     help = 'If true optimize for the eyeball pose.'
 )
 
 parser.add_argument(
     '--optimize_neckpose',
-    default = True, # False For RingNet project
+    default = False, # False For RingNet project
     type = bool,
     help = 'If true optimize for the neck pose.'
 )
