@@ -2,9 +2,6 @@ from imutils import face_utils
 import dlib
 import cv2
 import os
-from utils.landmarks import align_landmarks, convert_lm_coordinates
-from animation_by_video.model.video_model import VideoModel
-from matplotlib import pyplot as plt
 
 
 class Detector:
@@ -60,9 +57,6 @@ class FaceTracker:
 
     def execute(self, video_path=0):
         video = cv2.VideoCapture(video_path)
-        # model = VideoModel(cuda=False)
-        # model.init_for_execution(1)
-        # lms = model.neutral_landmarks.numpy().squeeze().T.tolist()
         while True:
             _, frame = video.read()
             self.detector.get_image(frame)
@@ -70,10 +64,6 @@ class FaceTracker:
             if face_detected:
                 self.detector.visualize_bounding_box()
                 self.detector.detect_landmarks()
-                # curr_lms = align_landmarks(self.detector.landmarks).T.tolist()
-                # plt.scatter(lms[0], lms[1], color="red")
-                # plt.scatter(curr_lms[0], curr_lms[1], color="green")
-                # plt.show()
                 self.detector.visualize_landmarks()
             cv2.imshow('Detection', self.detector.image)
             if cv2.waitKey(1) != -1:

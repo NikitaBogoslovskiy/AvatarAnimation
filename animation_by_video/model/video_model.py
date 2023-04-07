@@ -11,7 +11,6 @@ from FLAME.config import get_config
 from progress.bar import Bar
 from utils.progress_bar import TrainingBar
 import string
-import pickle
 from FLAME.flame_model import RADIAN
 
 
@@ -200,7 +199,6 @@ class VideoModel:
                 loss.backward()
                 optimizer.step()
                 bar.next(params.batch_size)
-                # print(f"epoch: {epoch_idx}, batch: {batch_idx}, loss = {loss}")
                 if counter > params.decay_frequency:
                     lr_scheduler.step()
                     counter = 0

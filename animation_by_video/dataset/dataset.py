@@ -113,7 +113,6 @@ class Dataset:
 
 
 if __name__ == "__main__":
-    pass
     p = DatasetParams(save_folder="train_data",
                       num_samples=100000,
                       expr_min=-2.5,
