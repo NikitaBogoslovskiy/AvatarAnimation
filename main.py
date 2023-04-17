@@ -1,11 +1,11 @@
-from animation_by_video.detector.detector import FaceTracker
+from video_animation.detector.detector import FaceTracker
 import torch
 import numpy as np
 from FLAME.flame_model import RADIAN
-from animation_by_video.visualizer.visualizer import Visualizer
+from video_animation.visualizer.visualizer import Visualizer
 from FLAME.flame_model import FlameModel
 from FLAME.config import get_config
-from animation_by_video.video_animation import VideoAnimation
+from video_animation.video_animation import VideoAnimation
 
 
 # tracker = FaceTracker()
