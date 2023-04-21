@@ -97,3 +97,24 @@ def run_transcribe(audio_path: str,
     all_outs = torch.cat(all_outs, axis=1) # combine outputs of chunks in one tensor
     decoded_output, decoded_offsets = decoder.decode(all_outs)
     return decoded_output, decoded_offsets
+
+
+def get_raw_output(audio_path: str,
+                   spect_parser: ChunkSpectrogramParser,
+                   model: DeepSpeech,
+                   device: torch.device,
+                   precision: int,
+                   chunk_size_seconds: float):
+    hs = None # means that the initial RNN hidden states are set to zeros
+    all_outs = []
+    with torch.no_grad():
+        for spect in spect_parser.parse_audio(audio_path, chunk_size_seconds):
+            spect = spect.contiguous()
+            spect = spect.view(1, 1, spect.size(0), spect.size(1))
+            spect = spect.to(device)
+            input_sizes = torch.IntTensor([spect.size(3)]).int()
+            with autocast(enabled=precision == 16):
+                out, output_sizes, hs = model(spect, input_sizes, hs)
+            all_outs.append(out.cpu())
+    all_outs = torch.cat(all_outs, axis=1)[0]  # combine outputs of chunks in one tensor
+    return all_outs

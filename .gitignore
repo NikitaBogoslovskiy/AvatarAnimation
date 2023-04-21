@@ -165,3 +165,5 @@ video_animation/detector/shape_predictor.dat
 
 audio_animation/deepspeech/models/*
 audio_animation/voice/deepspeech_files/*
+
+install_list.txt
