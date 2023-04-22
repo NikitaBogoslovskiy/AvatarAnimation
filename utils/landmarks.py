@@ -22,6 +22,16 @@ def divide_landmarks(landmarks: torch.Tensor):
     return left_eye, right_eye, nose_mouth
 
 
+def divide_landmarks_batch(landmarks: torch.Tensor):
+    left_eye_indices = torch.tensor(np.array([*LEFT_EYEBROW_LANDMARKS, *LEFT_EYE_LANDMARKS]))
+    right_eye_indices = torch.tensor(np.array([*RIGHT_EYEBROW_LANDMARKS, *RIGHT_EYE_LANDMARKS]))
+    nose_mouth_indices = torch.tensor(np.array([*NOSE_LANDMARKS, *MOUTH_LANDMARKS, *JAW_LANDMARKS]))
+    left_eye = landmarks[:, left_eye_indices, :]
+    right_eye = landmarks[:, right_eye_indices, :]
+    nose_mouth = landmarks[:, nose_mouth_indices, :]
+    return left_eye, right_eye, nose_mouth
+
+
 def distance(x: np.array, y: np.array):
     return np.linalg.norm(x - y)
 
