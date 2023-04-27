@@ -5,6 +5,7 @@ from FLAME.flame_model import RADIAN
 from FLAME.flame_model import FlameModel
 from FLAME.config import get_config
 from video_animation.video_animation import VideoAnimation
+from audio_animation.dataset.dataset import Dataset
 
 
 # tracker = FaceTracker()
@@ -22,8 +23,10 @@ from video_animation.video_animation import VideoAnimation
 # v.set_video("C:/Users/nikit/Pictures/Camera Roll/WIN_20230421_22_29_43_Pro.mp4")
 # v.capture_neutral_face("C:/Users/nikit/Pictures/Camera Roll/WIN_20230421_22_10_30_Pro.jpg")
 # v.animate_mesh()
-v = VideoAnimation()
-v.set_video()
-v.capture_neutral_face()
-v.animate_mesh()
+# v = VideoAnimation()
+# v.set_video()
+# v.capture_neutral_face()
+# v.animate_mesh()
+Dataset.generate(video_folder="C:/Content/Python/AvatarAnimation/audio_animation/dataset/raw_data",
+                 save_folder="C:/Content/Python/AvatarAnimation/audio_animation/dataset/train_data")
 

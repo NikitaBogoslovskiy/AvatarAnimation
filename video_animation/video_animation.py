@@ -14,12 +14,12 @@ from tqdm import tqdm
 
 
 class VideoAnimation:
-    def __init__(self, cuda=True):
+    def __init__(self, cuda=True, offline_mode_batch_size=200):
         self.video_stream = None
         self.video_mode = None
         self.visualizer = None
         self.neutral_landmarks = None
-        self.offline_mode_batch_size = 200
+        self.offline_mode_batch_size = offline_mode_batch_size
         self.detector = Detector()
         self.cuda = cuda
         self.video_model = VideoModel(self.cuda)
@@ -54,6 +54,13 @@ class VideoAnimation:
             self.visualizer.set_resolution(width, height)
             self.video_model.init_for_execution(batch_size=self.offline_mode_batch_size)
         self.visualizer.set_surfaces(self.video_model.flame_model.flamelayer.faces)
+
+    def init_settings(self):
+        self.video_mode = VideoMode.OFFLINE
+        self.video_model.init_for_execution(batch_size=self.offline_mode_batch_size)
+
+    def set_current_video(self, video_path):
+        self.video_stream = cv2.VideoCapture(video_path)
 
     def capture_neutral_face(self, photo_path=None):
         if self.video_mode == VideoMode.ONLINE:
@@ -117,19 +124,19 @@ class VideoAnimation:
             return frame, self.video_model.execute(self.execution_params)
         return frame, None
 
-    def _process_frames(self, batch_size):
+    def process_frames(self):
         frames_number = int(self.video_stream.get(cv2.CAP_PROP_FRAME_COUNT))
-        repeated_neutral_landmarks = self.video_model.neutral_landmarks[None, :, :].repeat(batch_size, 1, 1)
-        repeated_vertices = torch.Tensor(self.video_model.neutral_vertices)[None, :, :].repeat(batch_size, 1, 1)
+        repeated_neutral_landmarks = self.video_model.neutral_landmarks[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
+        repeated_vertices = torch.Tensor(self.video_model.neutral_vertices)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
         if self.cuda:
             repeated_vertices = repeated_vertices.cuda()
-        batch_num = frames_number // batch_size
-        current_batch_size = batch_size
+        batch_num = frames_number // self.offline_mode_batch_size
+        current_batch_size = self.offline_mode_batch_size
         landmarks_dirs = [torch.zeros_like(torch.Tensor(self.neutral_landmarks)[None, ])] * current_batch_size
         frames = [None] * current_batch_size
         for batch_idx in range(batch_num + 1):
             if batch_idx == batch_num:
-                current_batch_size = frames_number - batch_num * batch_size
+                current_batch_size = frames_number - batch_num * self.offline_mode_batch_size
             for frame_idx in tqdm(range(current_batch_size)):
                 _, frame = self.video_stream.read()
                 frames[frame_idx] = frame
@@ -190,7 +197,7 @@ class VideoAnimation:
             #     if model_output is not None:
             #         vertices[self.video_model.face_mask, :] = model_output[0, self.video_model.face_mask]
             #     self.visualizer.render(vertices.cpu().numpy().squeeze(), input_frame)
-            processed_frames = self._process_frames(self.offline_mode_batch_size)
+            processed_frames = self.process_frames()
             while True:
                 current_batch_size, output_vertices, input_frames = next(processed_frames)
                 if current_batch_size is None:
