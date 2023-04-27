@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from video_animation.detector.detector import Detector
 
 LEFT_EYEBROW_LANDMARKS = [17, 18, 19, 20, 21]
 LEFT_EYE_LANDMARKS = [36, 37, 38, 39, 40, 41]
@@ -84,3 +85,21 @@ def convert_lm_coordinates(lms):
     scaled_rotated_lms = rotated_lms / (width * 8)
     scaled_rotated_lms[:, 1] -= 0.008
     return scaled_rotated_lms
+
+
+def transform_frame_to_landmarks(process_idx, input_queue, output_queue):
+    local_detector = Detector()
+    while True:
+        if input_queue.empty():
+            continue
+        top = input_queue.get()
+        if top == -1:
+            return
+        frame_idx, frame = top
+        local_detector.get_image(frame)
+        found, rect = local_detector.detect_face()
+        if not found:
+            output_queue.put((frame_idx, None))
+            continue
+        landmarks = local_detector.detect_landmarks()
+        output_queue.put((frame_idx, torch.Tensor(align_landmarks(landmarks))[None, ]))
