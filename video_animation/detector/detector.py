@@ -1,3 +1,4 @@
+from config.paths import PROJECT_DIR
 from imutils import face_utils
 import dlib
 import cv2
@@ -7,7 +8,7 @@ import os
 class Detector:
     def __init__(self):
         self.face_detector = dlib.get_frontal_face_detector()
-        self.landmarks_detector = dlib.shape_predictor('video_animation/detector/shape_predictor.dat')
+        self.landmarks_detector = dlib.shape_predictor(f'{PROJECT_DIR}/video_animation/detector/shape_predictor.dat')
         self.image = None
         self.draft_image = None
         self.bounding_box = None

@@ -1,3 +1,4 @@
+from config.paths import PROJECT_DIR
 import torch
 from FLAME.flame_model import FlameModel
 import json
@@ -113,7 +114,7 @@ class Dataset:
 
 
 if __name__ == "__main__":
-    p = DatasetParams(save_folder="train_data",
+    p = DatasetParams(save_folder=f"{PROJECT_DIR}/video_animation/dataset/train_data",
                       num_samples=100000,
                       expr_min=-2.5,
                       expr_max=2.5,

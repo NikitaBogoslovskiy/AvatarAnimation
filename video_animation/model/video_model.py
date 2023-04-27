@@ -1,3 +1,4 @@
+from config.paths import PROJECT_DIR
 from video_animation.model.video_model_pytorch import VideoModelPyTorch
 from utils.torch_funcs import init_weights
 from os import walk
@@ -96,7 +97,7 @@ class VideoModel:
         self.default_position = torch.zeros(batch_size, 3)
         self.default_jaw = torch.zeros(batch_size, 2)
         self.neutral_vertices, self.neutral_landmarks = Dataset.upload_neutral(
-            "video_animation/dataset/train_data/neutral.json")
+            f"{PROJECT_DIR}/video_animation/dataset/train_data/neutral.json")
         self.neutral_vertices = torch.Tensor(self.neutral_vertices)
         self.neutral_landmarks = torch.Tensor(self.neutral_landmarks)
         if self.cuda:
@@ -264,8 +265,8 @@ class VideoModel:
 if __name__ == "__main__":
     pass
     params = VideoModelTrainParams(
-        dataset_path="C:/Content/Python/AvatarAnimation/video_animation/dataset/train_data",
-        output_weights_path="C:/Content/Python/AvatarAnimation/video_animation/weights",
+        dataset_path=f"{PROJECT_DIR}/video_animation/dataset/train_data",
+        output_weights_path=f"{PROJECT_DIR}/video_animation/weights",
         train_percentage=0.97,
         epoch_number=1,
         batch_size=100,

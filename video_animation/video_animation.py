@@ -1,3 +1,4 @@
+from config.paths import PROJECT_DIR
 import torch
 from video_animation.detector.detector import Detector
 import cv2
@@ -24,7 +25,7 @@ class VideoAnimation:
         self.cuda = cuda
         self.video_model = VideoModel(self.cuda)
         self.video_model.load_model(
-            weights_path="C:/Content/Python/AvatarAnimation/video_animation/weights/video_model_1_96900_eaUV2Qs70Tlmn0S.pt")
+            weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_1_96900_eaUV2Qs70Tlmn0S.pt")
         self.landmarks_number = None
         self.landmarks_sum = np.zeros((68, 2))
         self.landmarks_history = deque()
