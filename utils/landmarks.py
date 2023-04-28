@@ -51,14 +51,10 @@ def align_landmarks(landmarks: np.array):
     shift = (new_landmarks[30][1] - new_landmarks[29][1]) / 2
     face_center = new_landmarks[27] + (0, 5 * shift)
     new_landmarks -= face_center
-    # x_min = np.min(new_landmarks[:, 0])
-    # y_min = np.min(new_landmarks[:, 1])
     width = np.max(new_landmarks[:, 0]) - np.min(new_landmarks[:, 0])
     new_landmarks /= width * 7
+    new_landmarks[MOUTH_LANDMARKS] *= 1.5
     new_landmarks *= (1, -1)
-    # height = np.max(new_landmarks[:, 1]) - y_min
-    # divider = width if width > height else height
-    # new_landmarks = (new_landmarks - (x_min, y_min)) / (divider, divider)
     return new_landmarks
 
 

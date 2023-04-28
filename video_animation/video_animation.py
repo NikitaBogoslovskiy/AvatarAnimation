@@ -11,7 +11,7 @@ from utils.landmarks import align_landmarks, divide_landmarks, LEFT_EYE_LANDMARK
     RIGHT_EYEBROW_LANDMARKS, RIGHT_EYE_LANDMARKS, MOUTH_LANDMARKS, NOSE_LANDMARKS, JAW_LANDMARKS, divide_landmarks_batch, transform_frame_to_landmarks
 from utils.video_settings import VideoMode
 import os
-from tqdm import tqdm
+import keyboard
 from multiprocessing import Process, Queue
 from progress.bar import Bar
 
@@ -265,7 +265,7 @@ class VideoAnimation:
         if self.video_mode == VideoMode.ONLINE:
             self.landmarks_number = 2
             while True:
-                _, model_output = self._process_frame()
+                _, model_output = self.process_frame()
                 if model_output is not None:
                     vertices[self.video_model.face_mask, :] = model_output[0, self.video_model.face_mask]
                 self.visualizer.render(vertices.cpu().numpy().squeeze(), pause=0.001)
