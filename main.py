@@ -35,7 +35,6 @@ if __name__ == "__main__":
     v = VideoAnimation()
     v.set_video("C:/Users/nikit/Pictures/Camera Roll/WIN_20230421_22_29_43_Pro.mp4")
     v.capture_neutral_face("C:/Users/nikit/Pictures/Camera Roll/WIN_20230421_22_10_30_Pro.jpg")
-    # v.process_frames_2()
     t = time.time()
     v.animate_mesh()
     print(time.time() - t)

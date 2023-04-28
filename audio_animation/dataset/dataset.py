@@ -16,10 +16,12 @@ class Dataset:
         if not os.path.isfile(video_folder + '/' + "neutral.jpg"):
             raise IOError("You need to put image with neutral face in video folder and name it 'neutral.jpg'")
         video_names.remove("neutral.jpg")
+        video_names = list(filter(lambda x: x.endswith(".mp4"), video_names))
         voice_processor = VoiceProcessor()
         video_animation = VideoAnimation(cuda=cuda, offline_mode_batch_size=frames_batch_size)
         video_animation.init_settings()
         video_animation.capture_neutral_face(video_folder + '/' + "neutral.jpg")
+        video_animation.init_concurrent_mode(processes_number=8)
         lips_mask = upload_lips_mask()
         data_item_idx = 1
         for video_name in video_names:
@@ -27,7 +29,7 @@ class Dataset:
             video_with_audio.audio.write_audiofile(save_folder + '/' + "temp_audio.wav", fps=16000)
             audio_features = voice_processor.execute(save_folder + '/' + "temp_audio.wav").tolist()
             video_animation.set_current_video(video_folder + '/' + video_name)
-            processed_frames = video_animation.process_frames()
+            processed_frames = video_animation.process_frames_concurrently()
             lips_positions = []
             while True:
                 current_batch_size, output_vertices, _ = next(processed_frames)
@@ -40,6 +42,7 @@ class Dataset:
             with open(save_folder + f"/{data_item_idx}.json", "w") as f:
                 f.write(json.dumps(data_item))
             data_item_idx += 1
+        video_animation.release_concurrent_mode()
         os.remove(save_folder + '/' + "temp_audio.wav")
 
 
