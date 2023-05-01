@@ -53,7 +53,7 @@ def align_landmarks(landmarks: np.array):
     new_landmarks -= face_center
     width = np.max(new_landmarks[:, 0]) - np.min(new_landmarks[:, 0])
     new_landmarks /= width * 7
-    new_landmarks[MOUTH_LANDMARKS] *= 1.5
+    new_landmarks[MOUTH_LANDMARKS] *= 1.3
     new_landmarks *= (1, -1)
     return new_landmarks
 
@@ -83,7 +83,7 @@ def convert_lm_coordinates(lms):
     return scaled_rotated_lms
 
 
-def transform_frame_to_landmarks(process_idx, input_queue, output_queue):
+def transform_frame_to_landmarks(input_queue, output_queue):
     local_detector = Detector()
     while True:
         if input_queue.empty():

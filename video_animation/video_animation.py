@@ -11,7 +11,6 @@ from utils.landmarks import align_landmarks, divide_landmarks, LEFT_EYE_LANDMARK
     RIGHT_EYEBROW_LANDMARKS, RIGHT_EYE_LANDMARKS, MOUTH_LANDMARKS, NOSE_LANDMARKS, JAW_LANDMARKS, divide_landmarks_batch, transform_frame_to_landmarks
 from utils.video_settings import VideoMode
 import os
-import keyboard
 from multiprocessing import Process, Queue
 from progress.bar import Bar
 
@@ -75,7 +74,7 @@ class VideoAnimation:
         self.frames = [None] * self.offline_mode_batch_size
         self.processes = []
         for process_idx in range(self.processes_number):
-            self.processes.append(Process(target=transform_frame_to_landmarks, args=(process_idx, self.frames_queue, self.landmarks_queue, )))
+            self.processes.append(Process(target=transform_frame_to_landmarks, args=(self.frames_queue, self.landmarks_queue)))
             self.processes[process_idx].start()
 
     def release_concurrent_mode(self):
@@ -97,6 +96,16 @@ class VideoAnimation:
 
     def set_current_video(self, video_path):
         self.video_stream = cv2.VideoCapture(video_path)
+
+    def set_current_neutral_face(self):
+        while True:
+            _, frame = self.video_stream.read()
+            self.detector.get_image(frame)
+            b, rect = self.detector.detect_face()
+            if b:
+                landmarks = self.detector.detect_landmarks()
+                self.neutral_landmarks = align_landmarks(landmarks)
+                break
 
     def capture_neutral_face(self, photo_path=None):
         if self.video_mode == VideoMode.ONLINE:
@@ -161,20 +170,37 @@ class VideoAnimation:
         return frame, None
 
     def process_frames_concurrently(self):
-        frames_number = int(self.video_stream.get(cv2.CAP_PROP_FRAME_COUNT))
+        frames_number = int(self.video_stream.get(cv2.CAP_PROP_FRAME_COUNT)) - int(self.video_stream.get(cv2.CAP_PROP_POS_FRAMES))
         batch_num = frames_number // self.offline_mode_batch_size
         current_batch_size = self.offline_mode_batch_size
         bar = Bar('Video processing', max=frames_number, check_tty=False)
+        lacking_frames = []
 
         for batch_idx in range(batch_num + 1):
             if batch_idx == batch_num:
                 current_batch_size = frames_number - batch_num * self.offline_mode_batch_size
             for frame_idx in range(current_batch_size):
-                self.frames[frame_idx] = self.video_stream.read()[1]
+                success, frame = self.video_stream.read()
+                if not success:
+                    lacking_frames.append(frame_idx)
+                    self.frames[frame_idx] = None
+                    continue
+                self.frames[frame_idx] = frame
                 self.frames_queue.put((frame_idx, self.frames[frame_idx]))
+            for frame_idx in lacking_frames:
+                if frame_idx == 0:
+                    local_idx = 1
+                    while self.frames[local_idx] is None:
+                        local_idx += 1
+                    self.frames[0] = self.frames[local_idx]
+                else:
+                    self.frames[frame_idx] = self.frames[frame_idx - 1]
+                self.frames_queue.put((frame_idx, self.frames[frame_idx]))
+            fqs = self.frames_queue.qsize()
             processed_number = self.landmarks_queue.qsize()
             bar.next(processed_number)
             while True:
+                fqs = self.frames_queue.qsize()
                 current_size = self.landmarks_queue.qsize()
                 if current_size != processed_number:
                     bar.next(current_size - processed_number)
@@ -193,7 +219,9 @@ class VideoAnimation:
             landmarks_tensor = torch.cat(self.landmarks_list)
             if self.cuda:
                 landmarks_tensor = landmarks_tensor.cuda()
-            left_eye_dirs, right_eye_dirs, nose_mouth_dirs = divide_landmarks_batch(landmarks_tensor - self.repeated_human_neutral_landmarks[:, :, :2])
+            difference_tensor = landmarks_tensor - self.repeated_human_neutral_landmarks[:, :, :2]
+            difference_tensor[MOUTH_LANDMARKS] *= 1.2
+            left_eye_dirs, right_eye_dirs, nose_mouth_dirs = divide_landmarks_batch(difference_tensor)
             if self.cuda:
                 left_eye_dirs = left_eye_dirs.cuda()
                 right_eye_dirs = right_eye_dirs.cuda()

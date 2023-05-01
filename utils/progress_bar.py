@@ -10,3 +10,14 @@ class TrainingBar(Bar):
     @property
     def current_loss(self):
         return self.loss
+
+
+class Counter:
+    def __init__(self, count=0):
+        self.counter = count
+
+    def inc(self):
+        self.counter += 1
+
+    def dec(self):
+        self.counter -= 1
