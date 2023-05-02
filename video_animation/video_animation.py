@@ -64,12 +64,8 @@ class VideoAnimation:
     def init_concurrent_mode(self, processes_number=8):
         self.processes_number = processes_number
         self.repeated_model_neutral_landmarks = self.video_model.neutral_landmarks[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
-        self.repeated_human_neutral_landmarks = torch.Tensor(self.neutral_landmarks)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
-        if self.cuda:
-            self.repeated_human_neutral_landmarks = self.repeated_human_neutral_landmarks.cuda()
         self.repeated_vertices = torch.Tensor(self.video_model.neutral_vertices)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
         self.landmarks_queue = Queue()
-        self.landmarks_list = [torch.Tensor(self.neutral_landmarks)[None, ]] * self.offline_mode_batch_size
         self.frames_queue = Queue()
         self.frames = [None] * self.offline_mode_batch_size
         self.processes = []
@@ -106,6 +102,10 @@ class VideoAnimation:
                 landmarks = self.detector.detect_landmarks()
                 self.neutral_landmarks = align_landmarks(landmarks)
                 break
+        self.repeated_human_neutral_landmarks = torch.Tensor(self.neutral_landmarks)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
+        if self.cuda:
+            self.repeated_human_neutral_landmarks = self.repeated_human_neutral_landmarks.cuda()
+        self.landmarks_list = [torch.Tensor(self.neutral_landmarks)[None, ]] * self.offline_mode_batch_size
 
     def capture_neutral_face(self, photo_path=None):
         if self.video_mode == VideoMode.ONLINE:
@@ -174,9 +174,10 @@ class VideoAnimation:
         batch_num = frames_number // self.offline_mode_batch_size
         current_batch_size = self.offline_mode_batch_size
         bar = Bar('Video processing', max=frames_number, check_tty=False)
-        lacking_frames = []
+        iterations_number = batch_num + 1 if frames_number % self.offline_mode_batch_size != 0 else batch_num
 
-        for batch_idx in range(batch_num + 1):
+        for batch_idx in range(iterations_number):
+            lacking_frames = []
             if batch_idx == batch_num:
                 current_batch_size = frames_number - batch_num * self.offline_mode_batch_size
             for frame_idx in range(current_batch_size):
