@@ -11,6 +11,22 @@ from audio_animation.deepspeech.voice_processor import VoiceProcessor
 
 class Dataset:
     @staticmethod
+    def save(path, lips_positions, audio_features):
+        data_item = dict()
+        data_item["lips_positions"] = lips_positions
+        data_item["audio_features"] = audio_features
+        with open(path, "w") as f:
+            f.write(json.dumps(data_item))
+
+    @staticmethod
+    def upload(path):
+        with open(path, "r") as f:
+            data_item = json.loads(f.read())
+        if "lips_positions" not in data_item or "audio_features" not in data_item:
+            raise Exception("Wrong file. Must contain 'lips_positions' and 'audio_features' fields")
+        return data_item["lips_positions"], data_item["audio_features"]
+
+    @staticmethod
     def generate(video_folder, save_folder, frames_batch_size=200, cuda=True):
         video_names = next(os.walk(video_folder), (None, None, []))[2]
         # if not os.path.isfile(video_folder + '/' + "neutral.jpg"):
@@ -45,11 +61,7 @@ class Dataset:
                 audio_features = audio_features[:lips_positions_number]
             elif lips_positions_number > audio_features_number:
                 lips_positions = lips_positions[:audio_features_number]
-            data_item = dict()
-            data_item["audio_features"] = audio_features
-            data_item["lips_positions"] = lips_positions
-            with open(save_folder + f"/{os.path.splitext(os.path.basename(video_name))[0]}.json", "w") as f:
-                f.write(json.dumps(data_item))
+            Dataset.save(save_folder + f"/{os.path.splitext(os.path.basename(video_name))[0]}.json", lips_positions, audio_features)
             print("Done")
             data_item_idx += 1
         video_animation.release_concurrent_mode()
