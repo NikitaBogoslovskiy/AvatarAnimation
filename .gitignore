@@ -159,6 +159,15 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea/
 
-animation_by_video/dataset/train_data/*
-!animation_by_video/dataset/train_data/.gitkeep
-animation_by_video/detector/shape_predictor.dat
+video_animation/dataset/train_data/*
+!video_animation/dataset/train_data/.gitkeep
+video_animation/detector/shape_predictor.dat
+
+audio_animation/deepspeech/models/*
+!audio_animation/deepspeech/models/.gitkeep
+audio_animation/voice/deepspeech_files/*
+audio_animation/dataset/raw_data/*
+!audio_animation/dataset/raw_data/.gitkeep
+audio_animation/dataset/train_data/*
+!audio_animation/dataset/train_data/.gitkeep
+

@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from video_animation.detector.detector import Detector
 
 LEFT_EYEBROW_LANDMARKS = [17, 18, 19, 20, 21]
 LEFT_EYE_LANDMARKS = [36, 37, 38, 39, 40, 41]
@@ -22,6 +23,16 @@ def divide_landmarks(landmarks: torch.Tensor):
     return left_eye, right_eye, nose_mouth
 
 
+def divide_landmarks_batch(landmarks: torch.Tensor):
+    left_eye_indices = torch.tensor(np.array([*LEFT_EYEBROW_LANDMARKS, *LEFT_EYE_LANDMARKS]))
+    right_eye_indices = torch.tensor(np.array([*RIGHT_EYEBROW_LANDMARKS, *RIGHT_EYE_LANDMARKS]))
+    nose_mouth_indices = torch.tensor(np.array([*NOSE_LANDMARKS, *MOUTH_LANDMARKS, *JAW_LANDMARKS]))
+    left_eye = landmarks[:, left_eye_indices, :]
+    right_eye = landmarks[:, right_eye_indices, :]
+    nose_mouth = landmarks[:, nose_mouth_indices, :]
+    return left_eye, right_eye, nose_mouth
+
+
 def distance(x: np.array, y: np.array):
     return np.linalg.norm(x - y)
 
@@ -40,14 +51,10 @@ def align_landmarks(landmarks: np.array):
     shift = (new_landmarks[30][1] - new_landmarks[29][1]) / 2
     face_center = new_landmarks[27] + (0, 5 * shift)
     new_landmarks -= face_center
-    # x_min = np.min(new_landmarks[:, 0])
-    # y_min = np.min(new_landmarks[:, 1])
     width = np.max(new_landmarks[:, 0]) - np.min(new_landmarks[:, 0])
     new_landmarks /= width * 7
+    new_landmarks[MOUTH_LANDMARKS] *= 1.3
     new_landmarks *= (1, -1)
-    # height = np.max(new_landmarks[:, 1]) - y_min
-    # divider = width if width > height else height
-    # new_landmarks = (new_landmarks - (x_min, y_min)) / (divider, divider)
     return new_landmarks
 
 
@@ -74,3 +81,21 @@ def convert_lm_coordinates(lms):
     scaled_rotated_lms = rotated_lms / (width * 8)
     scaled_rotated_lms[:, 1] -= 0.008
     return scaled_rotated_lms
+
+
+def transform_frame_to_landmarks(input_queue, output_queue):
+    local_detector = Detector()
+    while True:
+        if input_queue.empty():
+            continue
+        top = input_queue.get()
+        if top == -1:
+            return
+        frame_idx, frame = top
+        local_detector.get_image(frame)
+        found, rect = local_detector.detect_face()
+        if not found:
+            output_queue.put((frame_idx, None))
+            continue
+        landmarks = local_detector.detect_landmarks()
+        output_queue.put((frame_idx, torch.Tensor(align_landmarks(landmarks))[None, ]))
