@@ -197,11 +197,11 @@ class VideoAnimation:
                 else:
                     self.frames[frame_idx] = self.frames[frame_idx - 1]
                 self.frames_queue.put((frame_idx, self.frames[frame_idx]))
-            fqs = self.frames_queue.qsize()
+            # fqs = self.frames_queue.qsize()
             processed_number = self.landmarks_queue.qsize()
             bar.next(processed_number)
             while True:
-                fqs = self.frames_queue.qsize()
+                # fqs = self.frames_queue.qsize()
                 current_size = self.landmarks_queue.qsize()
                 if current_size != processed_number:
                     bar.next(current_size - processed_number)
