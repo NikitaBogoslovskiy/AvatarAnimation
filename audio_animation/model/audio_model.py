@@ -4,7 +4,8 @@ from utils.torch_funcs import init_weights
 from os import walk
 import torch
 import random
-from audio_animation.dataset.dataset import Dataset
+from audio_animation.dataset.dataset import Dataset as AudioDataset
+from video_animation.dataset.dataset import Dataset as VideoDataset
 from FLAME.flame_model import FlameModel
 from FLAME.utils import upload_face_mask, upload_lips_mask
 from FLAME.config import get_config
@@ -90,7 +91,7 @@ class AudioModel:
     def init_for_execution(self, flame_batch_size):
         self.flame_batch_size = flame_batch_size
         self.flame_model = FlameModel(get_config(flame_batch_size), self.cuda)
-        self.neutral_vertices, _ = Dataset.upload_neutral(
+        self.neutral_vertices, _ = VideoDataset.upload_neutral(
             f"{PROJECT_DIR}/video_animation/dataset/train_data/neutral.json")
         self.neutral_vertices = torch.Tensor(self.neutral_vertices)
         self.default_shape = torch.zeros(flame_batch_size, 100)
@@ -108,7 +109,7 @@ class AudioModel:
             raise Exception("You cannot execute uninitialized model. Load the model.")
         if not self.init_for_execution:
             raise Exception("You have to call init_for_execution once before execution.")
-        output = self.torch_model(params.audio_features)
+        output = self.torch_model(params.audio_features[None, :])[0]
         num_items = output.size(dim=0)
         current_batch_size = self.flame_batch_size
         num_batches = num_items // self.flame_batch_size
@@ -116,6 +117,9 @@ class AudioModel:
         output_vertices = self.neutral_vertices[None, :].repeat(self.flame_batch_size, 1, 1)
         expressions = torch.zeros(self.flame_batch_size, 100)
         jaw = torch.zeros(self.flame_batch_size, 1)
+        if self.cuda:
+            expressions = expressions.cuda()
+            jaw = jaw.cuda()
         output[:, :100] = torch.clip(output[:, :100], params.expr_min, params.expr_max)
         output[:, 100] = torch.clip(output[:, 100], params.jaw_min, params.jaw_max)
         for batch_idx in range(iterations_number):
@@ -126,14 +130,14 @@ class AudioModel:
             head_vertices, _ = self.flame_model.generate(
                 self.default_shape, torch.cat([self.default_position, jaw, self.default_jaw], dim=1), expressions)
             output_vertices[:, self.face_mask] = head_vertices[:, self.face_mask]
-            yield current_batch_size, output_vertices.cpu()
+            yield current_batch_size, output_vertices.cpu().detach()
         yield None, None
 
     @staticmethod
     def _normalize_sequence_length(lips_positions, audio_features):
         max_indices = torch.argmax(audio_features, dim=1)
-        non_blank_indices = (max_indices != 0).nonzero(as_tuple=True)
-        start_idx, end_idx = non_blank_indices[0], non_blank_indices[-1]
+        non_blank_indices = (max_indices != 0).nonzero().tolist()
+        start_idx, end_idx = non_blank_indices[0][0], non_blank_indices[-1][0]
         audio_features_length = len(audio_features)
         blank_overall_length = start_idx + (audio_features_length - end_idx - 1)
         if audio_features_length > params.sequence_length:
@@ -142,15 +146,15 @@ class AudioModel:
                 start_blank_percentage, end_blank_percentage = start_idx / blank_overall_length, (audio_features_length - end_idx - 1) / blank_overall_length
                 new_start_idx, new_end_idx = int(round(start_blank_percentage * extra_length)), audio_features_length - int(round(end_blank_percentage * extra_length))
             elif blank_overall_length < extra_length:
-                new_start_idx, new_end_idx = start_idx, end_idx - (extra_length - blank_overall_length)
+                new_start_idx, new_end_idx = start_idx, end_idx - (extra_length - blank_overall_length) + 1
             else:
                 new_start_idx, new_end_idx = start_idx, end_idx
-            return lips_positions[new_end_idx: new_end_idx], audio_features[new_end_idx: new_end_idx]
+            return lips_positions[new_start_idx: new_end_idx], audio_features[new_start_idx: new_end_idx]
         elif audio_features_length < params.sequence_length:
             missing_length = params.sequence_length - audio_features_length
             start_blank_percentage, end_blank_percentage = start_idx / blank_overall_length, (audio_features_length - end_idx - 1) / blank_overall_length
-            start_dummies_number, end_dummies_number = int(round(start_blank_percentage * missing_length)), audio_features_length - int(round(end_blank_percentage * missing_length))
-            start_insertion_step, end_insertion_step = int(round(start_idx / start_dummies_number)), int(round((audio_features_length - end_idx - 1) / end_dummies_number))
+            start_dummies_number, end_dummies_number = int(round(start_blank_percentage * missing_length)), int(round(end_blank_percentage * missing_length))
+            start_insertion_step, end_insertion_step = int(start_idx / start_dummies_number), int((audio_features_length - end_idx - 1) / end_dummies_number)
             new_lips_list, new_audio_list = [], []
             for start_dummy_idx in range(start_dummies_number):
                 if start_dummy_idx != start_dummies_number - 1:
@@ -159,9 +163,9 @@ class AudioModel:
                     slice_idx_start, slice_idx_end = start_dummy_idx * start_insertion_step, start_idx
                 insertion_idx = slice_idx_end - 1
                 new_lips_list.append(lips_positions[slice_idx_start: slice_idx_end])
-                new_lips_list.append(lips_positions[insertion_idx])
+                new_lips_list.append(lips_positions[insertion_idx][None, :])
                 new_audio_list.append(audio_features[slice_idx_start: slice_idx_end])
-                new_audio_list.append(audio_features[insertion_idx])
+                new_audio_list.append(audio_features[insertion_idx][None, :])
             new_lips_list.append(lips_positions[start_idx: end_idx + 1])
             new_audio_list.append(audio_features[start_idx: end_idx + 1])
             for end_dummy_idx in range(end_dummies_number):
@@ -171,10 +175,10 @@ class AudioModel:
                     slice_idx_start, slice_idx_end = (end_idx + 1) + end_dummy_idx * end_insertion_step, audio_features_length
                 insertion_idx = slice_idx_end - 1
                 new_lips_list.append(lips_positions[slice_idx_start: slice_idx_end])
-                new_lips_list.append(lips_positions[insertion_idx])
+                new_lips_list.append(lips_positions[insertion_idx][None, :])
                 new_audio_list.append(audio_features[slice_idx_start: slice_idx_end])
-                new_audio_list.append(audio_features[insertion_idx])
-            return torch.stack(new_lips_list), torch.stack(new_audio_list)
+                new_audio_list.append(audio_features[insertion_idx][None, :])
+            return torch.cat(new_lips_list, dim=0), torch.cat(new_audio_list, dim=0)
 
     def train(self, params: AudioModelTrainParams):
         if self.torch_model is None:
@@ -211,7 +215,7 @@ class AudioModel:
             for batch_idx in range(num_train_batches):
                 ground_truth_lips_positions, input_audio_features = [], []
                 for item_idx in range(params.model_batch_size):
-                    lips_positions, audio_features = Dataset.upload(f"{params.dataset_path}/{item_names[batch_idx * params.model_batch_size + item_idx]}")
+                    lips_positions, audio_features = AudioDataset.upload(f"{params.dataset_path}/{item_names[batch_idx * params.model_batch_size + item_idx]}")
                     lips_positions = torch.Tensor(lips_positions)
                     audio_features = torch.Tensor(audio_features)
                     if len(audio_features) != params.sequence_length:
@@ -232,8 +236,8 @@ class AudioModel:
                         start_idx, end_idx = flame_batch_idx * params.flame_batch_size, (flame_batch_idx + 1) * params.flame_batch_size
                         head_vertices, _ = train_flame_model.generate(default_shape, torch.cat([default_position, output[item_idx, start_idx: end_idx, 100][:, None], default_jaw], dim=1),
                                                                       output[item_idx, start_idx: end_idx, :100])
-                        local_output_lips_positions.append(head_vertices[self.lips_mask])
-                    output_lips_positions.append(torch.stack(local_output_lips_positions))
+                        local_output_lips_positions.append(head_vertices[:, self.lips_mask])
+                    output_lips_positions.append(torch.cat(local_output_lips_positions, dim=0))
                 output_lips_positions = torch.stack(output_lips_positions)
                 loss = params.correctness_coefficient * torch.mean(torch.sum(torch.sum(torch.norm(ground_truth_lips_positions - output_lips_positions, dim=3), dim=2), dim=1)) + \
                        params.smoothing_coefficient * torch.mean(torch.sum(torch.sum(torch.norm((ground_truth_lips_positions[:, 1:] - ground_truth_lips_positions[:, :-1])
@@ -255,7 +259,7 @@ class AudioModel:
         for batch_idx in range(num_test_batches):
             ground_truth_lips_positions, input_audio_features = [], []
             for item_idx in range(params.model_batch_size):
-                lips_positions, audio_features = Dataset.upload(f"{params.dataset_path}/{item_names[test_start + batch_idx * params.model_batch_size + item_idx]}")
+                lips_positions, audio_features = AudioDataset.upload(f"{params.dataset_path}/{item_names[test_start + batch_idx * params.model_batch_size + item_idx]}")
                 lips_positions = torch.Tensor(lips_positions)
                 audio_features = torch.Tensor(audio_features)
                 if len(audio_features) != params.sequence_length:
@@ -274,10 +278,10 @@ class AudioModel:
                 local_output_lips_positions = []
                 for flame_batch_idx in range(num_flame_batches):
                     start_idx, end_idx = flame_batch_idx * params.flame_batch_size, (flame_batch_idx + 1) * params.flame_batch_size
-                    lips_vertices, _ = train_flame_model.generate(default_shape, torch.cat([default_position, output[item_idx, start_idx: end_idx, 100][:, None], default_jaw], dim=1),
+                    head_vertices, _ = train_flame_model.generate(default_shape, torch.cat([default_position, output[item_idx, start_idx: end_idx, 100][:, None], default_jaw], dim=1),
                                                                   output[item_idx, start_idx: end_idx, :100])
-                    local_output_lips_positions.append(lips_vertices)
-                output_lips_positions.append(torch.stack(local_output_lips_positions))
+                    local_output_lips_positions.append(head_vertices[:, self.lips_mask])
+                output_lips_positions.append(torch.cat(local_output_lips_positions))
             output_lips_positions = torch.stack(output_lips_positions)
             loss += params.correctness_coefficient * torch.mean(torch.sum(torch.sum(torch.norm(ground_truth_lips_positions - output_lips_positions, dim=3), dim=2), dim=1)) + \
                    params.smoothing_coefficient * torch.mean(torch.sum(torch.sum(torch.norm((ground_truth_lips_positions[:, 1:] - ground_truth_lips_positions[:, :-1])
@@ -290,7 +294,7 @@ class AudioModel:
         print(f"Test loss = {loss / num_test_batches:.4f}")
 
         torch.save(self.torch_model.state_dict(),
-                   f"{params.output_weights_path}/video_model_{params.epoch_number}_"
+                   f"{params.output_weights_path}/audio_model_{params.epoch_number}_"
                    f"{num_train_batches * params.model_batch_size}_"
                    f"{datetime.now().strftime('%d.%m.%Y-%H.%M.%S')}.pt")
         print(f"Model has been saved to {params.output_weights_path}")
@@ -302,13 +306,13 @@ if __name__ == "__main__":
         dataset_path=f"{PROJECT_DIR}/audio_animation/dataset/train_data",
         output_weights_path=f"{PROJECT_DIR}/audio_animation/weights",
         train_percentage=0.95,
-        epoch_number=1,
-        model_batch_size=2,
+        epoch_number=10,
+        model_batch_size=6,
         flame_batch_size=75,
         sequence_length=375,
         learning_rate=1e-3,
         decay_rate=0.98,
-        decay_frequency=10000,
+        decay_frequency=1000,
         correctness_coefficient=1.0,
         smoothing_coefficient=0.5,
         weight_decay=0.0

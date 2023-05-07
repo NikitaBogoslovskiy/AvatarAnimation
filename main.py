@@ -5,6 +5,7 @@ from FLAME.flame_model import RADIAN
 from FLAME.flame_model import FlameModel
 from FLAME.config import get_config
 from video_animation.video_animation import VideoAnimation
+from audio_animation.audio_animation import AudioAnimation
 import time
 
 
@@ -32,8 +33,12 @@ import time
 #                  save_folder="C:/Content/Python/AvatarAnimation/audio_animation/dataset/train_data")
 
 if __name__ == "__main__":
-    v = VideoAnimation()
-    v.set_video("C:/Content/Python/AvatarAnimation/audio_animation/dataset/raw_data/GH015182.MP4")
-    v.set_current_neutral_face()
+    # v = VideoAnimation()
+    # v.set_video("C:/Content/Python/AvatarAnimation/audio_animation/dataset/raw_data/GH015182.MP4")
+    # v.set_current_neutral_face()
     # v.capture_neutral_face("C:/Content/Python/AvatarAnimation/audio_animation/dataset/raw_data/GOPR5236.JPG")
-    v.animate_mesh()
+    # v.animate_mesh()
+    a = AudioAnimation()
+    a.set_audio("C:/Content/Python/AvatarAnimation/audio_animation/dataset/train_data/temp_audio.wav")
+    a.animate_mesh()
+    a.stop()

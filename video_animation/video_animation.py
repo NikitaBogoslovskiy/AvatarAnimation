@@ -53,7 +53,8 @@ class VideoAnimation:
             self.visualizer = OfflineVisualizer(f"{directory}/{video_name}_output.mp4")
             width = int(self.video_stream.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(self.video_stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            self.visualizer.set_resolution(width, height)
+            # self.visualizer.set_resolution(width, height)
+            self.visualizer.init_settings(animation_resolution=(height, height), input_resolution=(width, height), frame_rate=30)
             self.video_model.init_for_execution(batch_size=self.offline_mode_batch_size)
         self.visualizer.set_surfaces(self.video_model.flame_model.flamelayer.faces)
 
