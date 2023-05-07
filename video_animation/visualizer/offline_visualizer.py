@@ -40,12 +40,13 @@ class OfflineVisualizer:
         self.output_video = cv2.VideoWriter(self.save_path, cv2.VideoWriter_fourcc(*'MP4V'), 30, (width + height, height))
         self.r = pyrender.OffscreenRenderer(height, height)
 
-    def render(self, vertices, input_frame):
+    def render(self, vertices, input_frame=None):
         m = trimesh.Trimesh(vertices=vertices, faces=self.surfaces)
         mesh = pyrender.Mesh.from_trimesh(m, smooth=True)
         obj = self.scene.add(mesh, pose=self.object_pose)
         output_image, _ = self.r.render(self.scene)
-        self.output_video.write(np.concatenate((input_frame, output_image), axis=1))
+        final_frame = output_image if input_frame is None else np.concatenate((input_frame, output_image), axis=1)
+        self.output_video.write(final_frame)
         self.scene.remove_node(obj)
 
     def release(self):

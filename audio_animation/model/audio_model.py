@@ -126,7 +126,7 @@ class AudioModel:
             head_vertices, _ = self.flame_model.generate(
                 self.default_shape, torch.cat([self.default_position, jaw, self.default_jaw], dim=1), expressions)
             output_vertices[:, self.face_mask] = head_vertices[:, self.face_mask]
-            yield current_batch_size, output_vertices
+            yield current_batch_size, output_vertices.cpu()
         yield None, None
 
     @staticmethod
