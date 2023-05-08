@@ -5,6 +5,7 @@ from video_animation.visualizer.offline_visualizer import OfflineVisualizer
 import os
 from utils.video_functions import add_audio_to_video
 from tqdm import tqdm
+from progress.bar import Bar
 
 
 class AudioAnimation:
@@ -15,7 +16,7 @@ class AudioAnimation:
         self.voice_processor = VoiceProcessor()
         self.cuda = cuda
         self.audio_model = AudioModel(self.cuda)
-        self.audio_model.load_model(weights_path=f"{PROJECT_DIR}/audio_animation/weights/audio_model_10_96_07.05.2023-21.32.56.pt")
+        self.audio_model.load_model(weights_path=f"{PROJECT_DIR}/audio_animation/weights/audio_model_10_96_08.05.2023-18.36.36.pt")
         self.output_video_path_without_audio = None
         self.output_video_path_with_audio = None
         self.execution_params = AudioModelExecuteParams()
@@ -39,13 +40,18 @@ class AudioAnimation:
 
     def animate_mesh(self):
         processed_features = self.audio_model.execute(self.execution_params)
+        print("Started rendering video with animation...")
+        bar = Bar('Video rendering', max=self.execution_params.audio_features.size()[1], check_tty=False)
         while True:
             current_batch_size, output_vertices = next(processed_features)
             if current_batch_size is None:
                 break
             output_vertices = output_vertices.numpy().squeeze()
-            for idx in tqdm(range(current_batch_size)):
+            for idx in range(current_batch_size):
                 self.visualizer.render(output_vertices[idx])
+                bar.next()
+        bar.finish()
+        print("Done.")
 
     def stop(self):
         self.visualizer.release()

@@ -5,18 +5,18 @@ import torch
 class AudioModelPyTorch(nn.Module):
     def __init__(self):
         super(AudioModelPyTorch, self).__init__()
-        self.conv1d_1 = nn.Conv1d(in_channels=29,
+        self.conv1d_1 = nn.Conv1d(in_channels=36,
                                   out_channels=32,
                                   kernel_size=5,
                                   stride=1,
                                   padding='same')
-        self.relu_1 = nn.ReLU()
+        self.relu_1 = nn.LeakyReLU()
         self.conv1d_2 = nn.Conv1d(in_channels=32,
                                   out_channels=32,
                                   kernel_size=5,
                                   stride=1,
                                   padding='same')
-        self.relu_2 = nn.ReLU()
+        self.relu_2 = nn.LeakyReLU()
         self.lstm_1 = nn.LSTM(input_size=32,
                               hidden_size=128,
                               num_layers=2,

@@ -44,7 +44,7 @@ class Dataset:
         for video_name in video_names:
             video_with_audio = mp.VideoFileClip(video_folder + '/' + video_name)
             video_with_audio.audio.write_audiofile(save_folder + '/' + "temp_audio.wav", fps=16000)
-            audio_features = voice_processor.execute(save_folder + '/' + "temp_audio.wav").tolist()
+            audio_features = voice_processor.execute(save_folder + '/' + "temp_audio.wav").tolist()[0]
             video_animation.set_current_video(video_folder + '/' + video_name)
             video_animation.set_current_neutral_face()
             processed_frames = video_animation.process_frames_concurrently()
@@ -70,4 +70,4 @@ class Dataset:
 
 if __name__ == "__main__":
     Dataset.generate(video_folder=f"{PROJECT_DIR}/audio_animation/dataset/raw_data",
-                     save_folder=f"{PROJECT_DIR}/audio_animation/dataset/train_data")
+                     save_folder=f"{PROJECT_DIR}/audio_animation/dataset/train_data_new")

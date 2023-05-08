@@ -39,6 +39,6 @@ if __name__ == "__main__":
     # v.capture_neutral_face("C:/Content/Python/AvatarAnimation/audio_animation/dataset/raw_data/GOPR5236.JPG")
     # v.animate_mesh()
     a = AudioAnimation()
-    a.set_audio("C:/Content/Python/AvatarAnimation/audio_animation/dataset/train_data/temp_audio.wav")
+    a.set_audio("C:/Content/Python/AvatarAnimation/audio_animation/dataset/train_data/test2.wav")
     a.animate_mesh()
     a.stop()

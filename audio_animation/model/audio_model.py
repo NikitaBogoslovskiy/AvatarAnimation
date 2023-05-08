@@ -109,7 +109,7 @@ class AudioModel:
             raise Exception("You cannot execute uninitialized model. Load the model.")
         if not self.init_for_execution:
             raise Exception("You have to call init_for_execution once before execution.")
-        output = self.torch_model(params.audio_features[None, :])[0]
+        output = self.torch_model(params.audio_features)[0]
         num_items = output.size(dim=0)
         current_batch_size = self.flame_batch_size
         num_batches = num_items // self.flame_batch_size
@@ -136,10 +136,11 @@ class AudioModel:
     @staticmethod
     def _normalize_sequence_length(lips_positions, audio_features):
         max_indices = torch.argmax(audio_features, dim=1)
-        non_blank_indices = (max_indices != 0).nonzero().tolist()
+        non_blank_indices = (max_indices != 35).nonzero().tolist()
         start_idx, end_idx = non_blank_indices[0][0], non_blank_indices[-1][0]
         audio_features_length = len(audio_features)
         blank_overall_length = start_idx + (audio_features_length - end_idx - 1)
+
         if audio_features_length > params.sequence_length:
             extra_length = audio_features_length - params.sequence_length
             if blank_overall_length > extra_length:
@@ -148,37 +149,51 @@ class AudioModel:
             elif blank_overall_length < extra_length:
                 new_start_idx, new_end_idx = start_idx, end_idx - (extra_length - blank_overall_length) + 1
             else:
-                new_start_idx, new_end_idx = start_idx, end_idx
+                new_start_idx, new_end_idx = start_idx, end_idx + 1
             return lips_positions[new_start_idx: new_end_idx], audio_features[new_start_idx: new_end_idx]
+
         elif audio_features_length < params.sequence_length:
             missing_length = params.sequence_length - audio_features_length
-            start_blank_percentage, end_blank_percentage = start_idx / blank_overall_length, (audio_features_length - end_idx - 1) / blank_overall_length
-            start_dummies_number, end_dummies_number = int(round(start_blank_percentage * missing_length)), int(round(end_blank_percentage * missing_length))
-            start_insertion_step, end_insertion_step = int(start_idx / start_dummies_number), int((audio_features_length - end_idx - 1) / end_dummies_number)
+            start_blank_percentage = start_idx / blank_overall_length
+            start_dummies_number = int(round(start_blank_percentage * missing_length))
+            end_dummies_number = missing_length - start_dummies_number
             new_lips_list, new_audio_list = [], []
-            for start_dummy_idx in range(start_dummies_number):
-                if start_dummy_idx != start_dummies_number - 1:
-                    slice_idx_start, slice_idx_end = start_dummy_idx * start_insertion_step, (start_dummy_idx + 1) * start_insertion_step
-                else:
-                    slice_idx_start, slice_idx_end = start_dummy_idx * start_insertion_step, start_idx
-                insertion_idx = slice_idx_end - 1
-                new_lips_list.append(lips_positions[slice_idx_start: slice_idx_end])
-                new_lips_list.append(lips_positions[insertion_idx][None, :])
-                new_audio_list.append(audio_features[slice_idx_start: slice_idx_end])
-                new_audio_list.append(audio_features[insertion_idx][None, :])
-            new_lips_list.append(lips_positions[start_idx: end_idx + 1])
-            new_audio_list.append(audio_features[start_idx: end_idx + 1])
-            for end_dummy_idx in range(end_dummies_number):
-                if end_dummy_idx != end_dummies_number - 1:
-                    slice_idx_start, slice_idx_end = (end_idx + 1) + end_dummy_idx * end_insertion_step, (end_idx + 1) + (end_dummy_idx + 1) * end_insertion_step
-                else:
-                    slice_idx_start, slice_idx_end = (end_idx + 1) + end_dummy_idx * end_insertion_step, audio_features_length
-                insertion_idx = slice_idx_end - 1
-                new_lips_list.append(lips_positions[slice_idx_start: slice_idx_end])
-                new_lips_list.append(lips_positions[insertion_idx][None, :])
-                new_audio_list.append(audio_features[slice_idx_start: slice_idx_end])
-                new_audio_list.append(audio_features[insertion_idx][None, :])
-            return torch.cat(new_lips_list, dim=0), torch.cat(new_audio_list, dim=0)
+            if start_dummies_number != 0:
+                start_insertion_step = int(start_idx / start_dummies_number)
+                for start_dummy_idx in range(start_dummies_number):
+                    if start_dummy_idx != start_dummies_number - 1:
+                        slice_idx_start, slice_idx_end = start_dummy_idx * start_insertion_step, (start_dummy_idx + 1) * start_insertion_step
+                    else:
+                        slice_idx_start, slice_idx_end = start_dummy_idx * start_insertion_step, start_idx
+                    insertion_idx = slice_idx_end - 1
+                    new_lips_list.append(lips_positions[slice_idx_start: slice_idx_end])
+                    new_lips_list.append(lips_positions[insertion_idx][None, :])
+                    new_audio_list.append(audio_features[slice_idx_start: slice_idx_end])
+                    new_audio_list.append(audio_features[insertion_idx][None, :])
+            if end_dummies_number == 0:
+                new_lips_list.append(lips_positions[start_idx:])
+                new_audio_list.append(audio_features[start_idx:])
+            else:
+                new_lips_list.append(lips_positions[start_idx: end_idx + 1])
+                new_audio_list.append(audio_features[start_idx: end_idx + 1])
+            if end_dummies_number != 0:
+                end_insertion_step = int((audio_features_length - end_idx - 1) / end_dummies_number)
+                for end_dummy_idx in range(end_dummies_number):
+                    if end_dummy_idx != end_dummies_number - 1:
+                        slice_idx_start, slice_idx_end = (end_idx + 1) + end_dummy_idx * end_insertion_step, (end_idx + 1) + (end_dummy_idx + 1) * end_insertion_step
+                    else:
+                        slice_idx_start, slice_idx_end = (end_idx + 1) + end_dummy_idx * end_insertion_step, audio_features_length
+                    insertion_idx = slice_idx_end - 1
+                    new_lips_list.append(lips_positions[slice_idx_start: slice_idx_end])
+                    new_lips_list.append(lips_positions[insertion_idx][None, :])
+                    new_audio_list.append(audio_features[slice_idx_start: slice_idx_end])
+                    new_audio_list.append(audio_features[insertion_idx][None, :])
+            lips_output = torch.cat(new_lips_list, dim=0)
+            audio_output = torch.cat(new_audio_list, dim=0)
+            return lips_output, audio_output
+
+        else:
+            return lips_positions, audio_features
 
     def train(self, params: AudioModelTrainParams):
         if self.torch_model is None:
@@ -303,13 +318,13 @@ class AudioModel:
 if __name__ == "__main__":
     pass
     params = AudioModelTrainParams(
-        dataset_path=f"{PROJECT_DIR}/audio_animation/dataset/train_data",
+        dataset_path=f"{PROJECT_DIR}/audio_animation/dataset/train_data_new",
         output_weights_path=f"{PROJECT_DIR}/audio_animation/weights",
-        train_percentage=0.95,
-        epoch_number=10,
+        train_percentage=0.98,
+        epoch_number=7,
         model_batch_size=6,
-        flame_batch_size=75,
-        sequence_length=375,
+        flame_batch_size=200,
+        sequence_length=400,
         learning_rate=1e-3,
         decay_rate=0.98,
         decay_frequency=1000,

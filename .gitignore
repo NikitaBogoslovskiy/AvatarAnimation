@@ -170,4 +170,8 @@ audio_animation/dataset/raw_data/*
 !audio_animation/dataset/raw_data/.gitkeep
 audio_animation/dataset/train_data/*
 !audio_animation/dataset/train_data/.gitkeep
+audio_animation/dataset/train_data_new/*
+!audio_animation/dataset/train_data_new/.gitkeep
+audio_animation/dataset/backlog/*
+!audio_animation/dataset/backlog/.gitkeep
 
