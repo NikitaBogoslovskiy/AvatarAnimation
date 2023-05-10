@@ -137,15 +137,19 @@ class AudioModel:
     def _normalize_sequence_length(lips_positions, audio_features):
         max_indices = torch.argmax(audio_features, dim=1)
         non_blank_indices = (max_indices != 35).nonzero().tolist()
-        start_idx, end_idx = non_blank_indices[0][0], non_blank_indices[-1][0]
+        if len(non_blank_indices) > 0:
+            start_idx, end_idx = non_blank_indices[0][0], non_blank_indices[-1][0]
+        else:
+            start_idx, end_idx = 0, len(lips_positions) - 1
         audio_features_length = len(audio_features)
         blank_overall_length = start_idx + (audio_features_length - end_idx - 1)
 
         if audio_features_length > params.sequence_length:
             extra_length = audio_features_length - params.sequence_length
             if blank_overall_length > extra_length:
-                start_blank_percentage, end_blank_percentage = start_idx / blank_overall_length, (audio_features_length - end_idx - 1) / blank_overall_length
-                new_start_idx, new_end_idx = int(round(start_blank_percentage * extra_length)), audio_features_length - int(round(end_blank_percentage * extra_length))
+                start_blank_percentage = start_idx / blank_overall_length
+                new_start_idx = int(round(start_blank_percentage * extra_length))
+                new_end_idx = audio_features_length - (extra_length - new_start_idx)
             elif blank_overall_length < extra_length:
                 new_start_idx, new_end_idx = start_idx, end_idx - (extra_length - blank_overall_length) + 1
             else:
@@ -237,6 +241,7 @@ class AudioModel:
                         lips_positions, audio_features = AudioModel._normalize_sequence_length(lips_positions, audio_features)
                     ground_truth_lips_positions.append(lips_positions)
                     input_audio_features.append(audio_features)
+                    counter += 1
                 ground_truth_lips_positions = torch.stack(ground_truth_lips_positions)
                 input_audio_features = torch.stack(input_audio_features)
                 if self.cuda:
@@ -261,7 +266,7 @@ class AudioModel:
                 loss.backward()
                 optimizer.step()
                 bar.next(params.model_batch_size)
-                if counter > params.decay_frequency:
+                if counter >= params.decay_frequency:
                     lr_scheduler.step()
                     counter = 0
         bar.finish()
@@ -316,18 +321,17 @@ class AudioModel:
 
 
 if __name__ == "__main__":
-    pass
     params = AudioModelTrainParams(
-        dataset_path=f"{PROJECT_DIR}/audio_animation/dataset/train_data_new",
+        dataset_path=f"{PROJECT_DIR}/audio_animation/dataset/train_data",
         output_weights_path=f"{PROJECT_DIR}/audio_animation/weights",
         train_percentage=0.98,
-        epoch_number=7,
-        model_batch_size=6,
-        flame_batch_size=200,
-        sequence_length=400,
+        epoch_number=10,
+        model_batch_size=10,
+        flame_batch_size=50,
+        sequence_length=350,
         learning_rate=1e-3,
-        decay_rate=0.98,
-        decay_frequency=1000,
+        decay_rate=0.99,
+        decay_frequency=780,
         correctness_coefficient=1.0,
         smoothing_coefficient=0.5,
         weight_decay=0.0

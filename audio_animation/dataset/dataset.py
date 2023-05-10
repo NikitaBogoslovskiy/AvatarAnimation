@@ -1,12 +1,10 @@
 from config.paths import PROJECT_DIR
 import os
-import sys
 import json
 import moviepy.editor as mp
 from video_animation.video_animation import VideoAnimation
 from FLAME.utils import upload_lips_mask
-sys.path.append(f"{PROJECT_DIR}/audio_animation/deepspeech")
-from audio_animation.deepspeech.voice_processor import VoiceProcessor
+from audio_animation.wav2vec2.voice_processor import VoiceProcessor
 
 
 class Dataset:
@@ -29,9 +27,6 @@ class Dataset:
     @staticmethod
     def generate(video_folder, save_folder, frames_batch_size=200, cuda=True):
         video_names = next(os.walk(video_folder), (None, None, []))[2]
-        # if not os.path.isfile(video_folder + '/' + "neutral.jpg"):
-        #     raise IOError("You need to put image with neutral face in video folder and name it 'neutral.jpg'")
-        # video_names.remove("neutral.jpg")
         video_names = list(filter(lambda x: x.endswith(".mp4") or x.endswith(".MP4"), video_names))
         videos_number = len(video_names)
         voice_processor = VoiceProcessor()
@@ -70,4 +65,4 @@ class Dataset:
 
 if __name__ == "__main__":
     Dataset.generate(video_folder=f"{PROJECT_DIR}/audio_animation/dataset/raw_data",
-                     save_folder=f"{PROJECT_DIR}/audio_animation/dataset/train_data_new")
+                     save_folder=f"{PROJECT_DIR}/audio_animation/dataset/train_data")

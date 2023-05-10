@@ -1,22 +1,20 @@
-from audio_animation.model.audio_model import AudioModel, AudioModelExecuteParams
 from config.paths import PROJECT_DIR
-from audio_animation.deepspeech.voice_processor import VoiceProcessor
 from video_animation.visualizer.offline_visualizer import OfflineVisualizer
 import os
 from utils.video_functions import add_audio_to_video
-from tqdm import tqdm
 from progress.bar import Bar
+from audio_animation.model.audio_model import AudioModel, AudioModelExecuteParams
+from audio_animation.wav2vec2.voice_processor import VoiceProcessor
 
 
 class AudioAnimation:
     def __init__(self, cuda=True):
         self.visualizer = None
-        # self.output_video_path = None
         self.input_audio_path = None
         self.voice_processor = VoiceProcessor()
         self.cuda = cuda
         self.audio_model = AudioModel(self.cuda)
-        self.audio_model.load_model(weights_path=f"{PROJECT_DIR}/audio_animation/weights/audio_model_10_96_08.05.2023-18.36.36.pt")
+        self.audio_model.load_model(weights_path=f"{PROJECT_DIR}/audio_animation/weights/audio_model_10_780_10.05.2023-15.36.05.pt")
         self.output_video_path_without_audio = None
         self.output_video_path_with_audio = None
         self.execution_params = AudioModelExecuteParams()
@@ -33,7 +31,6 @@ class AudioAnimation:
         self.output_video_path_without_audio = f"{directory}/output_video_stream.mp4"
         self.output_video_path_with_audio = f"{directory}/{audio_name}.mp4"
         self.visualizer = OfflineVisualizer(self.output_video_path_without_audio)
-        # self.visualizer.set_resolution(*output_resolution)
         self.visualizer.init_settings(animation_resolution=output_resolution, input_resolution=None, frame_rate=50)
         self.audio_model.init_for_execution(flame_batch_size=200)
         self.visualizer.set_surfaces(self.audio_model.flame_model.flamelayer.faces)

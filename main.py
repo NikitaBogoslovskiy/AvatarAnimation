@@ -6,6 +6,7 @@ from FLAME.flame_model import FlameModel
 from FLAME.config import get_config
 from video_animation.video_animation import VideoAnimation
 from audio_animation.audio_animation import AudioAnimation
+from config.paths import PROJECT_DIR
 import time
 
 
@@ -34,11 +35,11 @@ import time
 
 if __name__ == "__main__":
     # v = VideoAnimation()
-    # v.set_video("C:/Content/Python/AvatarAnimation/audio_animation/dataset/raw_data/GH015182.MP4")
+    # v.set_video(f"{PROJECT_DIR}/audio_animation/dataset/raw_data/GH015252_2.mp4")
     # v.set_current_neutral_face()
-    # v.capture_neutral_face("C:/Content/Python/AvatarAnimation/audio_animation/dataset/raw_data/GOPR5236.JPG")
     # v.animate_mesh()
+    # v.stop()
     a = AudioAnimation()
-    a.set_audio("C:/Content/Python/AvatarAnimation/audio_animation/dataset/train_data/test2.wav")
+    a.set_audio(f"{PROJECT_DIR}/other_data/input_audios/2.wav")
     a.animate_mesh()
     a.stop()
