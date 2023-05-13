@@ -51,7 +51,7 @@ class OfflineVisualizer:
         self.r = pyrender.OffscreenRenderer(height, height)
 
     def render(self, vertices, input_frame=None):
-        m = trimesh.Trimesh(vertices=vertices, faces=self.surfaces)
+        m = trimesh.Trimesh(vertices=vertices, faces=self.surfaces, vertex_colors=[0.5, 0.5, 0.5])
         mesh = pyrender.Mesh.from_trimesh(m, smooth=True)
         obj = self.scene.add(mesh, pose=self.object_pose)
         output_image, _ = self.r.render(self.scene)

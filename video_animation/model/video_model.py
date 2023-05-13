@@ -78,6 +78,7 @@ class VideoModel:
         self.default_jaw = None
         self.neutral_vertices = None
         self.neutral_landmarks = None
+        self.landmarks_output = None
         self.face_mask = upload_face_mask()
         self.lips_mask = upload_lips_mask()
         if self.cuda:
@@ -116,7 +117,7 @@ class VideoModel:
         output = self.torch_model(params.left_eye, params.right_eye, params.nose_mouth)
         expressions = torch.clip(output[:, :100], params.expr_min, params.expr_max)
         jaw = torch.clip(output[:, 100], params.jaw_min, params.jaw_max)[:, None]
-        generated_vertices, _ = self.flame_model.generate(
+        generated_vertices, self.landmarks_output = self.flame_model.generate(
             self.default_shape, torch.cat([self.default_position, jaw, self.default_jaw], dim=1), expressions)
         return generated_vertices.detach()
 

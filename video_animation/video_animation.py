@@ -1,3 +1,5 @@
+from time import time
+
 from config.paths import PROJECT_DIR
 import torch
 from video_animation.detector.detector import Detector
@@ -5,7 +7,6 @@ import cv2
 from video_animation.model.video_model import VideoModel, VideoModelExecuteParams
 from video_animation.visualizer.online_visualizer import OnlineVisualizer
 from video_animation.visualizer.offline_visualizer import OfflineVisualizer
-from collections import deque
 import numpy as np
 from utils.landmarks import align_landmarks, divide_landmarks, LEFT_EYE_LANDMARKS, LEFT_EYEBROW_LANDMARKS, \
     RIGHT_EYEBROW_LANDMARKS, RIGHT_EYE_LANDMARKS, MOUTH_LANDMARKS, NOSE_LANDMARKS, JAW_LANDMARKS, divide_landmarks_batch, transform_frame_to_landmarks
@@ -13,13 +14,16 @@ from utils.video_settings import VideoMode
 import os
 from multiprocessing import Process, Queue
 from progress.bar import Bar
+from collections import deque
+from video_animation.visualizer.rendering import VisualizerParams, render_sequentially
 
 
 class VideoAnimation:
-    def __init__(self, cuda=True, offline_mode_batch_size=200):
+    def __init__(self, cuda=True, offline_mode_batch_size=100):
         self.video_stream = None
         self.video_mode = None
-        self.visualizer = None
+        self.online_visualizer = None
+        self.visualizer_params = None
         self.neutral_landmarks = None
         self.offline_mode_batch_size = offline_mode_batch_size
         self.detector = Detector()
@@ -36,13 +40,20 @@ class VideoAnimation:
         self.left_eye_indices = torch.tensor(np.array([*LEFT_EYEBROW_LANDMARKS, *LEFT_EYE_LANDMARKS]))
         self.right_eye_indices = torch.tensor(np.array([*RIGHT_EYEBROW_LANDMARKS, *RIGHT_EYE_LANDMARKS]))
         self.nose_mouth_indices = torch.tensor(np.array([*NOSE_LANDMARKS, *MOUTH_LANDMARKS, *JAW_LANDMARKS]))
+        self.pre_weights = None
+        self.post_weights = None
+        self.smoothing_level = 5
+        self.weights = [0.05, 0.05, 0.1, 0.2, 0.6]
+        self.last_landmarks = deque()
+        self.last_vertices = deque()
 
     def set_video(self, video_path=0):
         if video_path == 0:
             self.video_mode = VideoMode.ONLINE
-            self.visualizer = OnlineVisualizer()
+            self.online_visualizer = OnlineVisualizer()
             self.video_stream = cv2.VideoCapture(video_path)
             self.video_model.init_for_execution(batch_size=1)
+            self.online_visualizer.set_surfaces(self.video_model.flame_model.flamelayer.faces)
         else:
             self.video_mode = VideoMode.OFFLINE
             if not os.path.isfile(video_path):
@@ -50,13 +61,12 @@ class VideoAnimation:
             self.video_stream = cv2.VideoCapture(video_path)
             directory = os.path.dirname(video_path)
             video_name = os.path.splitext(os.path.basename(video_path))[0]
-            self.visualizer = OfflineVisualizer(f"{directory}/{video_name}_output.mp4")
-            width = int(self.video_stream.get(cv2.CAP_PROP_FRAME_WIDTH))
-            height = int(self.video_stream.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            # self.visualizer.set_resolution(width, height)
-            self.visualizer.init_settings(animation_resolution=(height, height), input_resolution=(width, height), frame_rate=30)
             self.video_model.init_for_execution(batch_size=self.offline_mode_batch_size)
-        self.visualizer.set_surfaces(self.video_model.flame_model.flamelayer.faces)
+            self.visualizer_params = VisualizerParams(save_path=f"{directory}/{video_name}_output.mp4",
+                                                      surfaces=self.video_model.flame_model.flamelayer.faces,
+                                                      width=int(self.video_stream.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                                                      height=int(self.video_stream.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+                                                      frame_rate=int(self.video_stream.get(cv2.CAP_PROP_FPS)))
 
     def init_settings(self):
         self.video_mode = VideoMode.OFFLINE
@@ -68,17 +78,22 @@ class VideoAnimation:
         self.repeated_vertices = torch.Tensor(self.video_model.neutral_vertices)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
         self.landmarks_queue = Queue()
         self.frames_queue = Queue()
+        self.ready_to_render_queue = Queue()
         self.frames = [None] * self.offline_mode_batch_size
         self.processes = []
         for process_idx in range(self.processes_number):
             self.processes.append(Process(target=transform_frame_to_landmarks, args=(self.frames_queue, self.landmarks_queue)))
             self.processes[process_idx].start()
+        self.rendering = Process(target=render_sequentially, args=(self.visualizer_params, self.ready_to_render_queue, ))
+        self.rendering.start()
 
     def release_concurrent_mode(self):
         for process_idx in range(self.processes_number):
             self.frames_queue.put(-1)
+        self.ready_to_render_queue.put(-1)
         for process_idx in range(self.processes_number):
             self.processes[process_idx].join()
+        self.rendering.join()
 
     def init_sequential_mode(self):
         self.repeated_neutral_landmarks = self.video_model.neutral_landmarks[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
@@ -107,6 +122,22 @@ class VideoAnimation:
         if self.cuda:
             self.repeated_human_neutral_landmarks = self.repeated_human_neutral_landmarks.cuda()
         self.landmarks_list = [torch.Tensor(self.neutral_landmarks)[None, ]] * self.offline_mode_batch_size
+
+    def _set_pre_weights(self):
+        pre_weights_list = []
+        pre_template_tensor = torch.ones_like(torch.Tensor(self.neutral_landmarks))
+        if self.cuda:
+            pre_template_tensor = pre_template_tensor.cuda()
+        for w in self.weights:
+            pre_weights_list.append((pre_template_tensor * w)[None, :])
+        self.pre_weights = torch.cat(pre_weights_list)
+
+    def _set_post_weights(self):
+        post_weights_list = []
+        post_template_tensor = torch.ones_like(self.video_model.neutral_vertices)
+        for w in self.weights:
+            post_weights_list.append((post_template_tensor * w)[None, :])
+        self.post_weights = torch.cat(post_weights_list)
 
     def capture_neutral_face(self, photo_path=None):
         if self.video_mode == VideoMode.ONLINE:
@@ -176,6 +207,8 @@ class VideoAnimation:
         current_batch_size = self.offline_mode_batch_size
         bar = Bar('Video processing', max=frames_number, check_tty=False)
         iterations_number = batch_num + 1 if frames_number % self.offline_mode_batch_size != 0 else batch_num
+        self._set_pre_weights()
+        self._set_post_weights()
 
         for batch_idx in range(iterations_number):
             lacking_frames = []
@@ -217,12 +250,20 @@ class VideoAnimation:
                 if frame_idx != 0:
                     self.landmarks_list[frame_idx] = self.landmarks_list[frame_idx - 1]
                 else:
-                    self.landmarks_list[frame_idx] = torch.Tensor(self.neutral_landmarks)[None,]
+                    self.landmarks_list[frame_idx] = torch.Tensor(self.neutral_landmarks)[None, ]
             landmarks_tensor = torch.cat(self.landmarks_list)
             if self.cuda:
                 landmarks_tensor = landmarks_tensor.cuda()
+            for landmarks_idx in range(current_batch_size):
+                if len(self.last_landmarks) < self.smoothing_level:
+                    self.last_landmarks.append(landmarks_tensor[landmarks_idx][None, :])
+                else:
+                    self.last_landmarks.popleft()
+                    self.last_landmarks.append(landmarks_tensor[landmarks_idx][None, :])
+                    landmarks_tensor[landmarks_idx] = torch.sum(torch.cat(list(self.last_landmarks)) * self.pre_weights, dim=0)
+                    self.last_landmarks[-1] = landmarks_tensor[landmarks_idx][None, :]
             difference_tensor = landmarks_tensor - self.repeated_human_neutral_landmarks[:, :, :2]
-            difference_tensor[MOUTH_LANDMARKS] *= 1.2
+            difference_tensor[:, MOUTH_LANDMARKS] *= 1.2
             left_eye_dirs, right_eye_dirs, nose_mouth_dirs = divide_landmarks_batch(difference_tensor)
             if self.cuda:
                 left_eye_dirs = left_eye_dirs.cuda()
@@ -233,6 +274,14 @@ class VideoAnimation:
             self.execution_params.nose_mouth = self.repeated_model_neutral_landmarks[:, self.nose_mouth_indices][:, :, :2] + nose_mouth_dirs
             output = self.video_model.execute(self.execution_params)
             self.repeated_vertices[:, self.video_model.face_mask] = output[:, self.video_model.face_mask]
+            for vertices_idx in range(current_batch_size):
+                if len(self.last_vertices) < self.smoothing_level:
+                    self.last_vertices.append(self.repeated_vertices[vertices_idx][None, :])
+                else:
+                    self.last_vertices.popleft()
+                    self.last_vertices.append(self.repeated_vertices[vertices_idx][None, :])
+                    self.repeated_vertices[vertices_idx] = torch.sum(torch.cat(list(self.last_vertices)) * self.post_weights, dim=0)
+                    self.last_vertices[-1] = self.repeated_vertices[vertices_idx][None, :]
             yield current_batch_size, self.repeated_vertices.cpu(), self.frames
 
         bar.finish()
@@ -298,19 +347,13 @@ class VideoAnimation:
                 _, model_output = self.process_frame()
                 if model_output is not None:
                     vertices[self.video_model.face_mask, :] = model_output[0, self.video_model.face_mask]
-                self.visualizer.render(vertices.cpu().numpy().squeeze(), pause=0.001)
+                self.online_visualizer.render(vertices.cpu().numpy().squeeze(), pause=0.001)
                 cv2.imshow('Window for avatar manipulation', self.detector.image)
                 if cv2.waitKey(1) == 27:
                     break
         elif self.video_mode == VideoMode.OFFLINE:
-            # self.landmarks_number = 3
-            # frames_number = int(self.video_stream.get(cv2.CAP_PROP_FRAME_COUNT))
-            # for _ in tqdm(range(frames_number)):
-            #     input_frame, model_output = self.process_frame()
-            #     if model_output is not None:
-            #         vertices[self.video_model.face_mask, :] = model_output[0, self.video_model.face_mask]
-            #     self.visualizer.render(vertices.cpu().numpy().squeeze(), input_frame)
-            self.init_concurrent_mode()
+            self.init_concurrent_mode(processes_number=7)
+            t = time()
             processed_frames = self.process_frames_concurrently()
             while True:
                 current_batch_size, output_vertices, input_frames = next(processed_frames)
@@ -318,10 +361,16 @@ class VideoAnimation:
                     break
                 output_vertices = output_vertices.numpy().squeeze()
                 for idx in range(current_batch_size):
-                    self.visualizer.render(output_vertices[idx], input_frames[idx])
+                    self.ready_to_render_queue.put((output_vertices[idx], input_frames[idx]))
+            print("Rendering...")
+            while self.ready_to_render_queue.qsize() != 0:
+                pass
+            print("Done.")
+            print(time() - t)
             self.release_concurrent_mode()
 
     def stop(self):
-        self.visualizer.release()
+        if self.online_visualizer is not None:
+            self.online_visualizer.release()
         self.video_stream.release()
         cv2.destroyAllWindows()
