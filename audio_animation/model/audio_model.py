@@ -13,6 +13,7 @@ from progress.bar import Bar
 from utils.progress_bar import TrainingBar
 from datetime import datetime
 from FLAME.flame_model import RADIAN
+from utils.landmarks import MOUTH_LANDMARKS
 
 
 class AudioModelTrainParams:
@@ -27,8 +28,10 @@ class AudioModelTrainParams:
                  learning_rate=1e-3,
                  decay_rate=0.98,
                  decay_frequency=10000,
-                 correctness_coefficient=1.0,
-                 smoothing_coefficient=0.5,
+                 vertices_coefficient=1.0,
+                 landmarks_coefficient=1.5,
+                 vertices_smoothing_coefficient=0.5,
+                 landmarks_smoothing_coefficient=0.5,
                  weight_decay=0.0):
         if flame_batch_size > sequence_length:
             raise Exception("flame_batch_size must be less or equal than sequence length")
@@ -44,8 +47,10 @@ class AudioModelTrainParams:
         self.learning_rate = learning_rate
         self.decay_rate = decay_rate
         self.decay_frequency = decay_frequency
-        self.correctness_coefficient = correctness_coefficient
-        self.smoothing_coefficient = smoothing_coefficient
+        self.vertices_coefficient = vertices_coefficient
+        self.landmarks_coefficient = landmarks_coefficient
+        self.vertices_smoothing_coefficient = vertices_smoothing_coefficient
+        self.landmarks_smoothing_coefficient = landmarks_smoothing_coefficient
         self.weight_decay = weight_decay
 
 
@@ -134,7 +139,7 @@ class AudioModel:
         yield None, None
 
     @staticmethod
-    def _normalize_sequence_length(lips_positions, audio_features):
+    def _normalize_sequence_length(lips_positions, lips_landmarks, audio_features):
         max_indices = torch.argmax(audio_features, dim=1)
         non_blank_indices = (max_indices != 35).nonzero().tolist()
         if len(non_blank_indices) > 0:
@@ -154,14 +159,14 @@ class AudioModel:
                 new_start_idx, new_end_idx = start_idx, end_idx - (extra_length - blank_overall_length) + 1
             else:
                 new_start_idx, new_end_idx = start_idx, end_idx + 1
-            return lips_positions[new_start_idx: new_end_idx], audio_features[new_start_idx: new_end_idx]
+            return lips_positions[new_start_idx: new_end_idx], lips_landmarks[new_start_idx: new_end_idx], audio_features[new_start_idx: new_end_idx]
 
         elif audio_features_length < params.sequence_length:
             missing_length = params.sequence_length - audio_features_length
             start_blank_percentage = start_idx / blank_overall_length
             start_dummies_number = int(round(start_blank_percentage * missing_length))
             end_dummies_number = missing_length - start_dummies_number
-            new_lips_list, new_audio_list = [], []
+            new_lips_positions_list, new_lips_landmarks_list, new_audio_features_list = [], [], []
             if start_dummies_number != 0:
                 start_insertion_step = int(start_idx / start_dummies_number)
                 for start_dummy_idx in range(start_dummies_number):
@@ -170,16 +175,20 @@ class AudioModel:
                     else:
                         slice_idx_start, slice_idx_end = start_dummy_idx * start_insertion_step, start_idx
                     insertion_idx = slice_idx_end - 1
-                    new_lips_list.append(lips_positions[slice_idx_start: slice_idx_end])
-                    new_lips_list.append(lips_positions[insertion_idx][None, :])
-                    new_audio_list.append(audio_features[slice_idx_start: slice_idx_end])
-                    new_audio_list.append(audio_features[insertion_idx][None, :])
+                    new_lips_positions_list.append(lips_positions[slice_idx_start: slice_idx_end])
+                    new_lips_positions_list.append(lips_positions[insertion_idx][None, :])
+                    new_lips_landmarks_list.append(lips_landmarks[slice_idx_start: slice_idx_end])
+                    new_lips_landmarks_list.append(lips_landmarks[insertion_idx][None, :])
+                    new_audio_features_list.append(audio_features[slice_idx_start: slice_idx_end])
+                    new_audio_features_list.append(audio_features[insertion_idx][None, :])
             if end_dummies_number == 0:
-                new_lips_list.append(lips_positions[start_idx:])
-                new_audio_list.append(audio_features[start_idx:])
+                new_lips_positions_list.append(lips_positions[start_idx:])
+                new_lips_landmarks_list.append(lips_positions[start_idx:])
+                new_audio_features_list.append(audio_features[start_idx:])
             else:
-                new_lips_list.append(lips_positions[start_idx: end_idx + 1])
-                new_audio_list.append(audio_features[start_idx: end_idx + 1])
+                new_lips_positions_list.append(lips_positions[start_idx: end_idx + 1])
+                new_lips_landmarks_list.append(lips_landmarks[start_idx: end_idx + 1])
+                new_audio_features_list.append(audio_features[start_idx: end_idx + 1])
             if end_dummies_number != 0:
                 end_insertion_step = int((audio_features_length - end_idx - 1) / end_dummies_number)
                 for end_dummy_idx in range(end_dummies_number):
@@ -188,16 +197,19 @@ class AudioModel:
                     else:
                         slice_idx_start, slice_idx_end = (end_idx + 1) + end_dummy_idx * end_insertion_step, audio_features_length
                     insertion_idx = slice_idx_end - 1
-                    new_lips_list.append(lips_positions[slice_idx_start: slice_idx_end])
-                    new_lips_list.append(lips_positions[insertion_idx][None, :])
-                    new_audio_list.append(audio_features[slice_idx_start: slice_idx_end])
-                    new_audio_list.append(audio_features[insertion_idx][None, :])
-            lips_output = torch.cat(new_lips_list, dim=0)
-            audio_output = torch.cat(new_audio_list, dim=0)
-            return lips_output, audio_output
+                    new_lips_positions_list.append(lips_positions[slice_idx_start: slice_idx_end])
+                    new_lips_positions_list.append(lips_positions[insertion_idx][None, :])
+                    new_lips_landmarks_list.append(lips_landmarks[slice_idx_start: slice_idx_end])
+                    new_lips_landmarks_list.append(lips_landmarks[insertion_idx][None, :])
+                    new_audio_features_list.append(audio_features[slice_idx_start: slice_idx_end])
+                    new_audio_features_list.append(audio_features[insertion_idx][None, :])
+            lips_positions_output = torch.cat(new_lips_positions_list, dim=0)
+            lips_landmarks_output = torch.cat(new_lips_landmarks_list, dim=0)
+            audio_features_output = torch.cat(new_audio_features_list, dim=0)
+            return lips_positions_output, lips_landmarks_output, audio_features_output
 
         else:
-            return lips_positions, audio_features
+            return lips_positions, lips_landmarks, audio_features
 
     def train(self, params: AudioModelTrainParams):
         if self.torch_model is None:
@@ -232,36 +244,48 @@ class AudioModel:
         print("Started training")
         for epoch_idx in range(params.epoch_number):
             for batch_idx in range(num_train_batches):
-                ground_truth_lips_positions, input_audio_features = [], []
+                ground_truth_lips_positions, ground_truth_lips_landmarks, input_audio_features = [], [], []
                 for item_idx in range(params.model_batch_size):
-                    lips_positions, audio_features = AudioDataset.upload(f"{params.dataset_path}/{item_names[batch_idx * params.model_batch_size + item_idx]}")
+                    lips_positions, lips_landmarks, audio_features = AudioDataset.upload(f"{params.dataset_path}/{item_names[batch_idx * params.model_batch_size + item_idx]}")
                     lips_positions = torch.Tensor(lips_positions)
+                    lips_landmarks = torch.Tensor(lips_landmarks)
                     audio_features = torch.Tensor(audio_features)
                     if len(audio_features) != params.sequence_length:
-                        lips_positions, audio_features = AudioModel._normalize_sequence_length(lips_positions, audio_features)
+                        lips_positions, lips_landmarks, audio_features = AudioModel._normalize_sequence_length(lips_positions, lips_landmarks, audio_features)
                     ground_truth_lips_positions.append(lips_positions)
+                    ground_truth_lips_landmarks.append(lips_landmarks)
                     input_audio_features.append(audio_features)
                     counter += 1
                 ground_truth_lips_positions = torch.stack(ground_truth_lips_positions)
+                ground_truth_lips_landmarks = torch.stack(ground_truth_lips_landmarks)
                 input_audio_features = torch.stack(input_audio_features)
                 if self.cuda:
                     ground_truth_lips_positions = ground_truth_lips_positions.cuda()
+                    ground_truth_lips_landmarks = ground_truth_lips_landmarks.cuda()
                     input_audio_features = input_audio_features.cuda()
                 optimizer.zero_grad()
                 output = self.torch_model(input_audio_features)
                 output_lips_positions = []
+                output_lips_landmarks = []
                 for item_idx in range(params.model_batch_size):
                     local_output_lips_positions = []
+                    local_output_lips_landmarks = []
                     for flame_batch_idx in range(num_flame_batches):
                         start_idx, end_idx = flame_batch_idx * params.flame_batch_size, (flame_batch_idx + 1) * params.flame_batch_size
-                        head_vertices, _ = train_flame_model.generate(default_shape, torch.cat([default_position, output[item_idx, start_idx: end_idx, 100][:, None], default_jaw], dim=1),
-                                                                      output[item_idx, start_idx: end_idx, :100])
+                        head_vertices, head_landmarks = train_flame_model.generate(default_shape, torch.cat([default_position, output[item_idx, start_idx: end_idx, 100][:, None], default_jaw], dim=1),
+                                                                                   output[item_idx, start_idx: end_idx, :100])
                         local_output_lips_positions.append(head_vertices[:, self.lips_mask])
+                        local_output_lips_landmarks.append(head_landmarks[:, MOUTH_LANDMARKS])
                     output_lips_positions.append(torch.cat(local_output_lips_positions, dim=0))
+                    output_lips_landmarks.append(torch.cat(local_output_lips_landmarks, dim=0))
                 output_lips_positions = torch.stack(output_lips_positions)
-                loss = params.correctness_coefficient * torch.mean(torch.sum(torch.sum(torch.norm(ground_truth_lips_positions - output_lips_positions, dim=3), dim=2), dim=1)) + \
-                       params.smoothing_coefficient * torch.mean(torch.sum(torch.sum(torch.norm((ground_truth_lips_positions[:, 1:] - ground_truth_lips_positions[:, :-1])
-                                                                                                - (output_lips_positions[:, 1:] - output_lips_positions[:, :-1])))))
+                output_lips_landmarks = torch.stack(output_lips_landmarks)
+                loss = params.vertices_coefficient * torch.mean(torch.sum(torch.sum(torch.norm(ground_truth_lips_positions - output_lips_positions, dim=3), dim=2), dim=1)) + \
+                       params.landmarks_coefficient * torch.mean(torch.sum(torch.sum(torch.norm(ground_truth_lips_landmarks - output_lips_landmarks, dim=3), dim=2), dim=1)) + \
+                       params.vertices_smoothing_coefficient * torch.mean(torch.sum(torch.sum(torch.norm((ground_truth_lips_positions[:, 1:] - ground_truth_lips_positions[:, :-1])
+                                                                                                         - (output_lips_positions[:, 1:] - output_lips_positions[:, :-1]))))) + \
+                       params.landmarks_smoothing_coefficient * torch.mean(torch.sum(torch.sum(torch.norm((ground_truth_lips_landmarks[:, 1:] - ground_truth_lips_landmarks[:, :-1])
+                                                                                                          - (output_lips_landmarks[:, 1:] - output_lips_landmarks[:, :-1])))))
                 bar.set_loss(loss)
                 loss.backward()
                 optimizer.step()
@@ -277,35 +301,47 @@ class AudioModel:
         bar = Bar('Testing progress', max=num_test_batches * params.model_batch_size, check_tty=False)
         print("Started evaluating test data")
         for batch_idx in range(num_test_batches):
-            ground_truth_lips_positions, input_audio_features = [], []
+            ground_truth_lips_positions, ground_truth_lips_landmarks, input_audio_features = [], [], []
             for item_idx in range(params.model_batch_size):
-                lips_positions, audio_features = AudioDataset.upload(f"{params.dataset_path}/{item_names[test_start + batch_idx * params.model_batch_size + item_idx]}")
+                lips_positions, lips_landmarks, audio_features = AudioDataset.upload(f"{params.dataset_path}/{item_names[test_start + batch_idx * params.model_batch_size + item_idx]}")
                 lips_positions = torch.Tensor(lips_positions)
+                lips_landmarks = torch.Tensor(lips_landmarks)
                 audio_features = torch.Tensor(audio_features)
                 if len(audio_features) != params.sequence_length:
-                    lips_positions, audio_features = AudioModel._normalize_sequence_length(lips_positions, audio_features)
+                    lips_positions, lips_landmarks, audio_features = AudioModel._normalize_sequence_length(lips_positions, lips_landmarks, audio_features)
                 ground_truth_lips_positions.append(lips_positions)
+                ground_truth_lips_landmarks.append(lips_landmarks)
                 input_audio_features.append(audio_features)
             ground_truth_lips_positions = torch.stack(ground_truth_lips_positions)
+            ground_truth_lips_landmarks = torch.stack(ground_truth_lips_landmarks)
             input_audio_features = torch.stack(input_audio_features)
             if self.cuda:
                 ground_truth_lips_positions = ground_truth_lips_positions.cuda()
+                ground_truth_lips_landmarks = ground_truth_lips_landmarks.cuda()
                 input_audio_features = input_audio_features.cuda()
             optimizer.zero_grad()
             output = self.torch_model(input_audio_features)
             output_lips_positions = []
+            output_lips_landmarks = []
             for item_idx in range(params.model_batch_size):
                 local_output_lips_positions = []
+                local_output_lips_landmarks = []
                 for flame_batch_idx in range(num_flame_batches):
                     start_idx, end_idx = flame_batch_idx * params.flame_batch_size, (flame_batch_idx + 1) * params.flame_batch_size
-                    head_vertices, _ = train_flame_model.generate(default_shape, torch.cat([default_position, output[item_idx, start_idx: end_idx, 100][:, None], default_jaw], dim=1),
-                                                                  output[item_idx, start_idx: end_idx, :100])
+                    head_vertices, head_landmarks = train_flame_model.generate(default_shape, torch.cat([default_position, output[item_idx, start_idx: end_idx, 100][:, None], default_jaw], dim=1),
+                                                                               output[item_idx, start_idx: end_idx, :100])
                     local_output_lips_positions.append(head_vertices[:, self.lips_mask])
+                    local_output_lips_landmarks.append(head_landmarks[:, MOUTH_LANDMARKS])
                 output_lips_positions.append(torch.cat(local_output_lips_positions))
+                output_lips_landmarks.append(torch.cat(local_output_lips_landmarks))
             output_lips_positions = torch.stack(output_lips_positions)
-            loss += params.correctness_coefficient * torch.mean(torch.sum(torch.sum(torch.norm(ground_truth_lips_positions - output_lips_positions, dim=3), dim=2), dim=1)) + \
-                   params.smoothing_coefficient * torch.mean(torch.sum(torch.sum(torch.norm((ground_truth_lips_positions[:, 1:] - ground_truth_lips_positions[:, :-1])
-                                                                                            - (output_lips_positions[:, 1:] - output_lips_positions[:, :-1])))))
+            output_lips_landmarks = torch.stack(output_lips_landmarks)
+            loss += params.vertices_coefficient * torch.mean(torch.sum(torch.sum(torch.norm(ground_truth_lips_positions - output_lips_positions, dim=3), dim=2), dim=1)) + \
+                    params.landmarks_coefficient * torch.mean(torch.sum(torch.sum(torch.norm(ground_truth_lips_landmarks - output_lips_landmarks, dim=3), dim=2), dim=1)) + \
+                    params.vertices_smoothing_coefficient * torch.mean(torch.sum(torch.sum(torch.norm((ground_truth_lips_positions[:, 1:] - ground_truth_lips_positions[:, :-1])
+                                                                                                      - (output_lips_positions[:, 1:] - output_lips_positions[:, :-1]))))) + \
+                    params.landmarks_smoothing_coefficient * torch.mean(torch.sum(torch.sum(torch.norm((ground_truth_lips_landmarks[:, 1:] - ground_truth_lips_landmarks[:, :-1])
+                                                                                                       - (output_lips_landmarks[:, 1:] - output_lips_landmarks[:, :-1])))))
             optimizer.step()
             bar.next(params.model_batch_size)
 
@@ -322,18 +358,20 @@ class AudioModel:
 
 if __name__ == "__main__":
     params = AudioModelTrainParams(
-        dataset_path=f"{PROJECT_DIR}/audio_animation/dataset/train_data",
+        dataset_path=f"D:/thesis/dataset/train_data_4",
         output_weights_path=f"{PROJECT_DIR}/audio_animation/weights",
-        train_percentage=0.98,
-        epoch_number=10,
-        model_batch_size=10,
-        flame_batch_size=50,
-        sequence_length=350,
+        train_percentage=0.999,
+        epoch_number=80,
+        model_batch_size=6,
+        flame_batch_size=75,
+        sequence_length=375,
         learning_rate=1e-3,
         decay_rate=0.99,
-        decay_frequency=780,
-        correctness_coefficient=1.0,
-        smoothing_coefficient=0.5,
+        decay_frequency=7980,
+        vertices_coefficient=1.0,
+        landmarks_coefficient=1.0,
+        vertices_smoothing_coefficient=0.75,
+        landmarks_smoothing_coefficient=0.75,
         weight_decay=0.0
     )
     audio_model = AudioModel(cuda=True)
