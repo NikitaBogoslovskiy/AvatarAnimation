@@ -1,21 +1,19 @@
-from time import time
-
 from config.paths import PROJECT_DIR
 import torch
 from video_animation.detector.detector import Detector
 import cv2
 from video_animation.model.video_model import VideoModel, VideoModelExecuteParams
 from video_animation.visualizer.online_visualizer import OnlineVisualizer
-from video_animation.visualizer.offline_visualizer import OfflineVisualizer
 import numpy as np
 from utils.landmarks import align_landmarks, divide_landmarks, LEFT_EYE_LANDMARKS, LEFT_EYEBROW_LANDMARKS, \
-    RIGHT_EYEBROW_LANDMARKS, RIGHT_EYE_LANDMARKS, MOUTH_LANDMARKS, NOSE_LANDMARKS, JAW_LANDMARKS, divide_landmarks_batch, transform_frame_to_landmarks
+    RIGHT_EYEBROW_LANDMARKS, RIGHT_EYE_LANDMARKS, MOUTH_LANDMARKS, NOSE_LANDMARKS, JAW_LANDMARKS, divide_landmarks_batch
 from utils.video_settings import VideoMode
 import os
 from multiprocessing import Process, Queue
 from progress.bar import Bar
 from collections import deque
-from video_animation.visualizer.rendering import VisualizerParams, render_sequentially
+from video_animation.concurrent.rendering import VisualizerParams, render_sequentially
+from video_animation.concurrent.detection import transform_frame_to_landmarks
 
 
 class VideoAnimation:
@@ -73,26 +71,34 @@ class VideoAnimation:
         self.video_model.init_for_execution(batch_size=self.offline_mode_batch_size)
 
     def init_concurrent_mode(self, processes_number=8):
+        self.repeated_human_neutral_landmarks = torch.Tensor(self.neutral_landmarks)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
+        if self.cuda:
+            self.repeated_human_neutral_landmarks = self.repeated_human_neutral_landmarks.cuda()
+        self.landmarks_list = [torch.Tensor(self.neutral_landmarks)[None, ]] * self.offline_mode_batch_size
         self.processes_number = processes_number
         self.repeated_model_neutral_landmarks = self.video_model.neutral_landmarks[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
         self.repeated_vertices = torch.Tensor(self.video_model.neutral_vertices)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
         self.landmarks_queue = Queue()
         self.frames_queue = Queue()
-        self.ready_to_render_queue = Queue()
         self.frames = [None] * self.offline_mode_batch_size
         self.processes = []
         for process_idx in range(self.processes_number):
             self.processes.append(Process(target=transform_frame_to_landmarks, args=(self.frames_queue, self.landmarks_queue)))
             self.processes[process_idx].start()
+
+    def init_concurrent_rendering(self):
+        self.ready_to_render_queue = Queue()
         self.rendering = Process(target=render_sequentially, args=(self.visualizer_params, self.ready_to_render_queue, ))
         self.rendering.start()
 
     def release_concurrent_mode(self):
         for process_idx in range(self.processes_number):
             self.frames_queue.put(-1)
-        self.ready_to_render_queue.put(-1)
         for process_idx in range(self.processes_number):
             self.processes[process_idx].join()
+
+    def release_concurrent_rendering(self):
+        self.ready_to_render_queue.put(-1)
         self.rendering.join()
 
     def init_sequential_mode(self):
@@ -118,10 +124,6 @@ class VideoAnimation:
                 landmarks = self.detector.detect_landmarks()
                 self.neutral_landmarks = align_landmarks(landmarks)
                 break
-        self.repeated_human_neutral_landmarks = torch.Tensor(self.neutral_landmarks)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
-        if self.cuda:
-            self.repeated_human_neutral_landmarks = self.repeated_human_neutral_landmarks.cuda()
-        self.landmarks_list = [torch.Tensor(self.neutral_landmarks)[None, ]] * self.offline_mode_batch_size
 
     def _set_pre_weights(self):
         pre_weights_list = []
@@ -263,7 +265,7 @@ class VideoAnimation:
                     landmarks_tensor[landmarks_idx] = torch.sum(torch.cat(list(self.last_landmarks)) * self.pre_weights, dim=0)
                     self.last_landmarks[-1] = landmarks_tensor[landmarks_idx][None, :]
             difference_tensor = landmarks_tensor - self.repeated_human_neutral_landmarks[:, :, :2]
-            difference_tensor[:, MOUTH_LANDMARKS] *= 1.2
+            difference_tensor[:, MOUTH_LANDMARKS] *= 1.0
             left_eye_dirs, right_eye_dirs, nose_mouth_dirs = divide_landmarks_batch(difference_tensor)
             if self.cuda:
                 left_eye_dirs = left_eye_dirs.cuda()
@@ -338,11 +340,11 @@ class VideoAnimation:
         yield None, None, None
 
     def animate_mesh(self):
-        vertices = torch.Tensor(self.video_model.neutral_vertices)
-        if self.cuda:
-            vertices = vertices.cuda()
         if self.video_mode == VideoMode.ONLINE:
             self.landmarks_number = 2
+            vertices = torch.Tensor(self.video_model.neutral_vertices)
+            if self.cuda:
+                vertices = vertices.cuda()
             while True:
                 _, model_output = self.process_frame()
                 if model_output is not None:
@@ -353,7 +355,7 @@ class VideoAnimation:
                     break
         elif self.video_mode == VideoMode.OFFLINE:
             self.init_concurrent_mode(processes_number=7)
-            t = time()
+            self.init_concurrent_rendering()
             processed_frames = self.process_frames_concurrently()
             while True:
                 current_batch_size, output_vertices, input_frames = next(processed_frames)
@@ -366,8 +368,8 @@ class VideoAnimation:
             while self.ready_to_render_queue.qsize() != 0:
                 pass
             print("Done.")
-            print(time() - t)
             self.release_concurrent_mode()
+            self.release_concurrent_rendering()
 
     def stop(self):
         if self.online_visualizer is not None:

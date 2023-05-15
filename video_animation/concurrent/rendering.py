@@ -26,6 +26,6 @@ def render_sequentially(params: VisualizerParams, queue):
             continue
         top = queue.get()
         if top == -1:
-            v.release()
-            return
+            break
         v.render(top[0], top[1])
+    v.release()

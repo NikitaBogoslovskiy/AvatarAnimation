@@ -6,6 +6,8 @@ from video_animation.video_animation import VideoAnimation
 from FLAME.utils import upload_lips_mask
 from audio_animation.wav2vec2.voice_processor import VoiceProcessor
 from utils.landmarks import MOUTH_LANDMARKS
+from time import time
+import datetime
 
 
 class Dataset:
@@ -34,11 +36,12 @@ class Dataset:
         voice_processor = VoiceProcessor()
         video_animation = VideoAnimation(cuda=cuda, offline_mode_batch_size=frames_batch_size)
         video_animation.init_settings()
-        # video_animation.capture_neutral_face(video_folder + '/' + "neutral.jpg")
         video_animation.init_concurrent_mode(processes_number=8)
         lips_mask = upload_lips_mask()
         data_item_idx = 1
+        time_sum = 0
         for video_name in video_names:
+            start_t = time()
             video_with_audio = mp.VideoFileClip(video_folder + '/' + video_name)
             video_with_audio.audio.write_audiofile(save_folder + '/' + "temp_audio.wav", fps=16000)
             audio_features = voice_processor.execute(save_folder + '/' + "temp_audio.wav").tolist()[0]
@@ -63,6 +66,9 @@ class Dataset:
                 lips_landmarks = lips_landmarks[:audio_features_number]
             Dataset.save(save_folder + f"/{os.path.splitext(os.path.basename(video_name))[0]}.json", lips_positions, lips_landmarks, audio_features)
             print("Done")
+            time_sum += time() - start_t
+            remaining_time = int((time_sum / data_item_idx) * (videos_number - data_item_idx))
+            print(f"Remaining time: {str(datetime.timedelta(seconds=remaining_time))}")
             data_item_idx += 1
         video_animation.release_concurrent_mode()
         os.remove(save_folder + '/' + "temp_audio.wav")
@@ -70,4 +76,4 @@ class Dataset:
 
 if __name__ == "__main__":
     Dataset.generate(video_folder=f"{PROJECT_DIR}/audio_animation/dataset/raw_data",
-                     save_folder=f"D:/thesis/dataset/train_data_4")
+                     save_folder=f"D:/thesis/dataset/train_data_5")

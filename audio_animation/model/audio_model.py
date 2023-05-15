@@ -358,16 +358,16 @@ class AudioModel:
 
 if __name__ == "__main__":
     params = AudioModelTrainParams(
-        dataset_path=f"D:/thesis/dataset/train_data_4",
+        dataset_path=f"D:/thesis/dataset/train_data_5",
         output_weights_path=f"{PROJECT_DIR}/audio_animation/weights",
-        train_percentage=0.999,
-        epoch_number=80,
-        model_batch_size=6,
+        train_percentage=0.99,
+        epoch_number=10,
+        model_batch_size=20,
         flame_batch_size=75,
         sequence_length=375,
         learning_rate=1e-3,
         decay_rate=0.99,
-        decay_frequency=7980,
+        decay_frequency=10000,
         vertices_coefficient=1.0,
         landmarks_coefficient=1.0,
         vertices_smoothing_coefficient=0.75,
@@ -375,4 +375,5 @@ if __name__ == "__main__":
         weight_decay=0.0
     )
     audio_model = AudioModel(cuda=True)
+    # audio_model.load_model(f"{PROJECT_DIR}/audio_animation/weights/audio_model_10_780_14.05.2023-14.08.46.pt")
     audio_model.train(params)
