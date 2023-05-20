@@ -17,7 +17,7 @@ from video_animation.concurrent.detection import transform_frame_to_landmarks
 
 
 class VideoAnimation:
-    def __init__(self, cuda=True, offline_mode_batch_size=100):
+    def __init__(self, cuda=True, offline_mode_batch_size=100, show_detection_results=True):
         self.video_stream = None
         self.video_mode = None
         self.online_visualizer = None
@@ -26,13 +26,12 @@ class VideoAnimation:
         self.offline_mode_batch_size = offline_mode_batch_size
         self.detector = Detector()
         self.cuda = cuda
+        self.show_detection_results = show_detection_results
         self.video_model = VideoModel(self.cuda)
         self.video_model.load_model(
-            weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_1_96900_eaUV2Qs70Tlmn0S.pt")
-        self.landmarks_number = None
+            weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_1_98800_20.05.2023-23.02.10.pt")
         self.landmarks_sum = np.zeros((68, 2))
         self.landmarks_history = deque()
-        self.momentum = 0.0
         self.local_counter = 0
         self.execution_params = VideoModelExecuteParams()
         self.left_eye_indices = torch.tensor(np.array([*LEFT_EYEBROW_LANDMARKS, *LEFT_EYE_LANDMARKS]))
@@ -40,9 +39,12 @@ class VideoAnimation:
         self.nose_mouth_indices = torch.tensor(np.array([*NOSE_LANDMARKS, *MOUTH_LANDMARKS, *JAW_LANDMARKS]))
         self.pre_weights = None
         self.post_weights = None
-        self.smoothing_level = 5
-        self.weights = [0.05, 0.05, 0.1, 0.2, 0.6]
+        # self.smoothing_level = 5
+        # self.weights = [0.05, 0.05, 0.1, 0.2, 0.6]
+        self.smoothing_level = 2
+        self.weights = [0.3, 0.7]
         self.last_landmarks = deque()
+
         self.last_vertices = deque()
 
     def set_video(self, video_path=0):
@@ -125,7 +127,7 @@ class VideoAnimation:
                 self.neutral_landmarks = align_landmarks(landmarks)
                 break
 
-    def _set_pre_weights(self):
+    def _set_pre_weights_offline(self):
         pre_weights_list = []
         pre_template_tensor = torch.ones_like(torch.Tensor(self.neutral_landmarks))
         if self.cuda:
@@ -134,12 +136,22 @@ class VideoAnimation:
             pre_weights_list.append((pre_template_tensor * w)[None, :])
         self.pre_weights = torch.cat(pre_weights_list)
 
-    def _set_post_weights(self):
+    def _set_post_weights_offline(self):
         post_weights_list = []
         post_template_tensor = torch.ones_like(self.video_model.neutral_vertices)
         for w in self.weights:
             post_weights_list.append((post_template_tensor * w)[None, :])
         self.post_weights = torch.cat(post_weights_list)
+
+    def _set_pre_weights_online(self):
+        pre_weights_list = []
+        pre_template_tensor = np.ones_like(self.neutral_landmarks)
+        for w in self.weights:
+            pre_weights_list.append((pre_template_tensor * w)[None, :])
+        self.pre_weights = np.concatenate(pre_weights_list)
+
+    def _set_post_weights_online(self):
+        self._set_post_weights_offline()
 
     def capture_neutral_face(self, photo_path=None):
         if self.video_mode == VideoMode.ONLINE:
@@ -177,17 +189,18 @@ class VideoAnimation:
         b, rect = self.detector.detect_face()
         if b:
             landmarks = self.detector.detect_landmarks()
-            self.detector.visualize_landmarks()
             landmarks = align_landmarks(landmarks)
-            self.landmarks_history.append(landmarks)
-            self.landmarks_sum += landmarks
-            if self.local_counter == self.landmarks_number:
-                left_landmarks = self.landmarks_history.popleft()
-                self.landmarks_sum -= left_landmarks
-                smoothed_landmarks = self.landmarks_sum / self.landmarks_number
-            else:
+            if self.show_detection_results:
+                self.detector.visualize_bounding_box()
+                self.detector.visualize_landmarks()
+            if len(self.last_landmarks) < self.smoothing_level:
+                self.last_landmarks.append(landmarks[None, :])
                 smoothed_landmarks = landmarks
-                self.local_counter += 1
+            else:
+                self.last_landmarks.popleft()
+                self.last_landmarks.append(landmarks[None, :])
+                smoothed_landmarks = np.sum(np.concatenate(list(self.last_landmarks)) * self.pre_weights, axis=0)
+                self.last_landmarks[-1] = smoothed_landmarks[None, :]
             left_eye_dir, right_eye_dir, nose_mouth_dir = \
                 divide_landmarks(smoothed_landmarks - self.neutral_landmarks)
             left_eye_dir = torch.Tensor(left_eye_dir)
@@ -200,7 +213,15 @@ class VideoAnimation:
             self.execution_params.left_eye = self.video_model.neutral_landmarks[self.left_eye_indices][:, :2] + left_eye_dir
             self.execution_params.right_eye = self.video_model.neutral_landmarks[self.right_eye_indices][:, :2] + right_eye_dir
             self.execution_params.nose_mouth = self.video_model.neutral_landmarks[self.nose_mouth_indices][:, :2] + nose_mouth_dir
-            return frame, self.video_model.execute(self.execution_params)
+            output = self.video_model.execute(self.execution_params)
+            if len(self.last_vertices) < self.smoothing_level:
+                self.last_vertices.append(output)
+            else:
+                self.last_vertices.popleft()
+                self.last_vertices.append(output)
+                output = torch.sum(torch.cat(list(self.last_vertices)) * self.post_weights, dim=0)[None, :]
+                self.last_vertices[-1] = output
+            return frame, output
         return frame, None
 
     def process_frames_concurrently(self):
@@ -209,8 +230,8 @@ class VideoAnimation:
         current_batch_size = self.offline_mode_batch_size
         bar = Bar('Video processing', max=frames_number, check_tty=False)
         iterations_number = batch_num + 1 if frames_number % self.offline_mode_batch_size != 0 else batch_num
-        self._set_pre_weights()
-        self._set_post_weights()
+        self._set_pre_weights_offline()
+        self._set_post_weights_offline()
 
         for batch_idx in range(iterations_number):
             lacking_frames = []
@@ -233,11 +254,9 @@ class VideoAnimation:
                 else:
                     self.frames[frame_idx] = self.frames[frame_idx - 1]
                 self.frames_queue.put((frame_idx, self.frames[frame_idx]))
-            # fqs = self.frames_queue.qsize()
             processed_number = self.landmarks_queue.qsize()
             bar.next(processed_number)
             while True:
-                # fqs = self.frames_queue.qsize()
                 current_size = self.landmarks_queue.qsize()
                 if current_size != processed_number:
                     bar.next(current_size - processed_number)
@@ -245,7 +264,9 @@ class VideoAnimation:
                 if current_size == current_batch_size:
                     break
             for _ in range(current_batch_size):
-                frame_idx, vertices = self.landmarks_queue.get()
+                frame_idx, vertices, image = self.landmarks_queue.get()
+                if self.show_detection_results:
+                    self.frames[frame_idx] = image
                 if vertices is not None:
                     self.landmarks_list[frame_idx] = vertices
                     continue
@@ -289,6 +310,7 @@ class VideoAnimation:
         bar.finish()
         yield None, None, None
 
+    # TODO: Need refactoring
     def process_frames_sequentially(self):
         frames_number = int(self.video_stream.get(cv2.CAP_PROP_FRAME_COUNT))
         batch_num = frames_number // self.offline_mode_batch_size
@@ -341,7 +363,8 @@ class VideoAnimation:
 
     def animate_mesh(self):
         if self.video_mode == VideoMode.ONLINE:
-            self.landmarks_number = 2
+            self._set_pre_weights_online()
+            self._set_post_weights_online()
             vertices = torch.Tensor(self.video_model.neutral_vertices)
             if self.cuda:
                 vertices = vertices.cuda()
