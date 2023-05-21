@@ -4,7 +4,6 @@ import pyrender
 import trimesh
 
 RADIAN = np.pi / 180.0
-# EXPR_MIN =
 
 
 class FlameModel:
@@ -70,11 +69,3 @@ class FlameModel:
 
 if __name__ == "__main__":
     pass
-    # fm = FlameModel(get_config())
-    # shape_params = torch.zeros(1, 100).cuda()  # 35, 45, 90, 0..30, -4..5, -6..8
-    # pose_params_numpy = np.array([[0, 0, 0, 0 * RADIAN, 0 * RADIAN, 0 * RADIAN]], dtype=np.float32)
-    # pose_params = torch.tensor(pose_params_numpy, dtype=torch.float32).cuda()
-    # expression_params = torch.ones(1, 50, dtype=torch.float32).cuda() * 2
-    #
-    # v, l = fm.generate(shape_params, pose_params, expression_params)
-    # fm._draw(v, l)

@@ -5,8 +5,7 @@ import json
 from FLAME.config import get_config
 from progress.bar import Bar
 from FLAME.flame_model import RADIAN
-from utils.landmarks import align_landmarks
-from FLAME.utils import upload_face_mask, upload_lips_mask
+from FLAME.utils import upload_masks
 
 JAW_ARTICULATION_PROBABILITY = 0.1
 
@@ -23,11 +22,10 @@ class DatasetParams:
 
 class Dataset:
     @staticmethod
-    def save(path, face, lips, landmarks):
+    def save(path, **kwargs):
         data_item = dict()
-        data_item["face"] = face
-        data_item["lips"] = lips
-        data_item["landmarks"] = landmarks
+        for name, data in kwargs.items():
+            data_item[name] = data
         with open(path, "w") as f:
             f.write(json.dumps(data_item))
 
@@ -43,9 +41,7 @@ class Dataset:
     def upload(path):
         with open(path, "r") as f:
             data_item = json.loads(f.read())
-        if "face" not in data_item or "lips" not in data_item or "landmarks" not in data_item:
-            raise Exception("Wrong file. Must contain 'face', 'lips' and 'landmarks' fields")
-        return data_item["face"], data_item["lips"], data_item["landmarks"]
+        return data_item
 
     @staticmethod
     def upload_neutral(path):
@@ -60,12 +56,11 @@ class Dataset:
         model = FlameModel(get_config(batch_size), cuda)
         num_batches = params.num_samples // batch_size
         num_items = num_batches * batch_size
-        face_mask = upload_face_mask()
-        lips_mask = upload_lips_mask()
+        masks = upload_masks()
         bar = Bar('Generated data items', max=num_items, check_tty=False)
         shape = torch.zeros(num_items, model.config.shape_params)
         pose = torch.zeros(num_items, model.config.pose_params)
-        pose[:, 3] = torch.rand(num_items) * (params.jaw_max - params.jaw_min) + params.jaw_min
+        pose[:, 3] = torch.clip(torch.normal(mean=0.0 * RADIAN, std=2.5 * RADIAN, size=(num_items,)), min=params.jaw_min, max=params.jaw_max)
         pose[:, 3] *= (torch.rand(num_items) < JAW_ARTICULATION_PROBABILITY)
         expr = torch.rand(num_items, model.config.expression_params) * (params.expr_max - params.expr_min) \
                + params.expr_min
@@ -77,36 +72,47 @@ class Dataset:
             pose = pose.cuda()
             expr = expr.cuda()
         global_item_idx = 1
+
         print("Started generating dataset")
         for batch_idx in range(num_batches):
             start_idx = batch_idx * batch_size
             end_idx = start_idx + batch_size
             vertices, landmarks = model.generate(shape[start_idx:end_idx], pose[start_idx:end_idx],
                                                  expr[start_idx:end_idx])
+            all_vertices = vertices.detach().cpu()
+            landmarks = landmarks.detach().cpu().numpy().squeeze().tolist()
             if batch_idx == 0:
-                processed_vertices = vertices.detach().cpu().numpy()
-                processed_landmarks = landmarks.detach().cpu().numpy().squeeze().tolist()
                 Dataset.save_neutral(f"{params.save_folder}/neutral.json",
-                             processed_vertices[0].squeeze().tolist(), processed_landmarks[0])
+                                     all_vertices.numpy()[0].squeeze().tolist(), landmarks[0])
+                forehead = all_vertices[:, masks.forehead].numpy().squeeze().tolist()
+                left_eye_region = all_vertices[:, masks.left_eye_region].numpy().squeeze().tolist()
+                right_eye_region = all_vertices[:, masks.right_eye_region].numpy().squeeze().tolist()
+                nose = all_vertices[:, masks.nose].numpy().squeeze().tolist()
+                lips = all_vertices[:, masks.lips].numpy().squeeze().tolist()
                 for local_item_idx in range(1, batch_size):
                     Dataset.save(f"{params.save_folder}/{global_item_idx}.json",
-                                 processed_vertices[local_item_idx, face_mask.numpy()].squeeze().tolist(),
-                                 processed_vertices[local_item_idx, lips_mask.numpy()].squeeze().tolist(),
-                                 processed_landmarks[local_item_idx])
+                                 forehead=forehead[local_item_idx],
+                                 left_eye_region=left_eye_region[local_item_idx],
+                                 right_eye_region=right_eye_region[local_item_idx],
+                                 nose=nose[local_item_idx],
+                                 lips=lips[local_item_idx],
+                                 landmarks=landmarks[local_item_idx])
                     bar.next()
                     global_item_idx += 1
                 continue
-            processed_faces = vertices.detach().cpu()[:, face_mask].numpy().squeeze().tolist()
-            processed_lips = vertices.detach().cpu()[:, lips_mask].numpy().squeeze().tolist()
-            processed_landmarks = landmarks.detach().cpu().numpy().squeeze().tolist()
+            forehead = all_vertices[:, masks.forehead].numpy().squeeze().tolist()
+            left_eye_region = all_vertices[:, masks.left_eye_region].numpy().squeeze().tolist()
+            right_eye_region = all_vertices[:, masks.right_eye_region].numpy().squeeze().tolist()
+            nose = all_vertices[:, masks.nose].numpy().squeeze().tolist()
+            lips = all_vertices[:, masks.lips].numpy().squeeze().tolist()
             for local_item_idx in range(batch_size):
                 Dataset.save(f"{params.save_folder}/{global_item_idx}.json",
-                             processed_faces[local_item_idx],
-                             processed_lips[local_item_idx],
-                             processed_landmarks[local_item_idx])
-                # le, re, nm = divide_landmarks(landmarks[local_item_idx])
-                # model.draw(vertices[local_item_idx], landmarks[local_item_idx])
-                # model._draw_with_divided_landmarks(vertices[local_item_idx], le, re, nm)
+                             forehead=forehead[local_item_idx],
+                             left_eye_region=left_eye_region[local_item_idx],
+                             right_eye_region=right_eye_region[local_item_idx],
+                             nose=nose[local_item_idx],
+                             lips=lips[local_item_idx],
+                             landmarks=landmarks[local_item_idx])
                 bar.next()
                 global_item_idx += 1
         bar.finish()
@@ -114,10 +120,10 @@ class Dataset:
 
 
 if __name__ == "__main__":
-    p = DatasetParams(save_folder=f"{PROJECT_DIR}/video_animation/dataset/train_data",
+    p = DatasetParams(save_folder=f"{PROJECT_DIR}/video_animation/dataset/train_data_4",
                       num_samples=100000,
-                      expr_min=-2.5,
-                      expr_max=2.5,
+                      expr_min=-3,
+                      expr_max=3,
                       jaw_min=0.0 * RADIAN,
-                      jaw_max=22.5 * RADIAN)
+                      jaw_max=20 * RADIAN)
     Dataset.generate(p, batch_size=500)

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from config.paths import PROJECT_DIR
 from video_animation.model.video_model_pytorch import VideoModelPyTorch
 from utils.torch_funcs import init_weights
@@ -5,13 +7,12 @@ from os import walk
 import torch
 import random
 from video_animation.dataset.dataset import Dataset
-from utils.landmarks import divide_landmarks, FACIAL_LANDMARKS, MOUTH_LANDMARKS
+from utils.landmarks import divide_landmarks, MOUTH_LANDMARKS, LEFT_EYE_LANDMARKS, LEFT_EYEBROW_LANDMARKS, RIGHT_EYE_LANDMARKS, RIGHT_EYEBROW_LANDMARKS, NOSE_LANDMARKS, JAW_LANDMARKS
 from FLAME.flame_model import FlameModel
-from FLAME.utils import upload_face_mask, upload_lips_mask
+from FLAME.utils import upload_face_mask, upload_lips_mask, upload_masks
 from FLAME.config import get_config
 from progress.bar import Bar
 from utils.progress_bar import TrainingBar
-import string
 from FLAME.flame_model import RADIAN
 
 
@@ -28,10 +29,16 @@ class VideoModelTrainParams:
                  noise_level=1e-3,
                  regularization=5e-4,
                  weight_decay=0.0,
-                 face_loss_coefficient=0.3,
-                 lips_loss_coefficient=0.5,
-                 landmarks_loss_coefficient=0.7,
-                 mouth_landmarks_loss_coefficient=0.5):
+                 left_eye_landmarks_loss_coefficient=1.0,
+                 right_eye_landmarks_loss_coefficient=1.0,
+                 nose_landmarks_loss_coefficient=1.0,
+                 lips_landmarks_loss_coefficient=1.0,
+                 jaw_landmarks_loss_coefficient=1.0,
+                 forehead_vertices_loss_coefficient=1.0,
+                 left_eye_vertices_loss_coefficient=1.0,
+                 right_eye_vertices_loss_coefficient=1.0,
+                 nose_vertices_loss_coefficient=1.0,
+                 lips_vertices_loss_coefficient=1.0):
         self.dataset_path = dataset_path
         self.output_weights_path = output_weights_path
         self.train_percentage = train_percentage
@@ -43,10 +50,16 @@ class VideoModelTrainParams:
         self.noise_level = noise_level
         self.regularization = regularization
         self.weight_decay = weight_decay
-        self.face_loss_coefficient = face_loss_coefficient
-        self.lips_loss_coefficient = lips_loss_coefficient
-        self.landmarks_loss_coefficient = landmarks_loss_coefficient
-        self.mouth_landmarks_loss_coefficient = mouth_landmarks_loss_coefficient
+        self.left_eye_landmarks_loss_coefficient = left_eye_landmarks_loss_coefficient
+        self.right_eye_landmarks_loss_coefficient = right_eye_landmarks_loss_coefficient
+        self.nose_landmarks_loss_coefficient = nose_landmarks_loss_coefficient
+        self.lips_landmarks_loss_coefficient = lips_landmarks_loss_coefficient
+        self.jaw_landmarks_loss_coefficient = jaw_landmarks_loss_coefficient
+        self.forehead_vertices_loss_coefficient = forehead_vertices_loss_coefficient
+        self.left_eye_vertices_loss_coefficient = left_eye_vertices_loss_coefficient
+        self.right_eye_vertices_loss_coefficient = right_eye_vertices_loss_coefficient
+        self.nose_vertices_loss_coefficient = nose_vertices_loss_coefficient
+        self.lips_vertices_loss_coefficient = lips_vertices_loss_coefficient
 
 
 class VideoModelExecuteParams:
@@ -54,10 +67,10 @@ class VideoModelExecuteParams:
                  left_eye=None,
                  right_eye=None,
                  nose_mouth=None,
-                 expr_min=-2.3,
-                 expr_max=2.3,
+                 expr_min=-2.5,
+                 expr_max=2.5,
                  jaw_min=0.0,
-                 jaw_max=20 * RADIAN):
+                 jaw_max=2.0 * RADIAN):
         self.left_eye = left_eye
         self.right_eye = right_eye
         self.nose_mouth = nose_mouth
@@ -78,11 +91,14 @@ class VideoModel:
         self.default_jaw = None
         self.neutral_vertices = None
         self.neutral_landmarks = None
+        self.landmarks_output = None
         self.face_mask = upload_face_mask()
         self.lips_mask = upload_lips_mask()
+        self.masks = upload_masks()
         if self.cuda:
             self.face_mask = self.face_mask.cuda()
             self.lips_mask = self.lips_mask.cuda()
+            self.masks.to_cuda()
 
     def load_model(self, weights_path):
         self.torch_model = VideoModelPyTorch()
@@ -116,7 +132,7 @@ class VideoModel:
         output = self.torch_model(params.left_eye, params.right_eye, params.nose_mouth)
         expressions = torch.clip(output[:, :100], params.expr_min, params.expr_max)
         jaw = torch.clip(output[:, 100], params.jaw_min, params.jaw_max)[:, None]
-        generated_vertices, _ = self.flame_model.generate(
+        generated_vertices, self.landmarks_output = self.flame_model.generate(
             self.default_shape, torch.cat([self.default_position, jaw, self.default_jaw], dim=1), expressions)
         return generated_vertices.detach()
 
@@ -156,27 +172,36 @@ class VideoModel:
         for epoch_idx in range(params.epoch_number):
             for batch_idx in range(num_train_batches):
                 noise = torch.rand((params.batch_size, 54, 2)) * params.noise_level
-                left_eyes, right_eyes, noses_mouths, origin_faces, origin_lips, origin_landmarks = [], [], [], [], [], []
+                left_eyes, right_eyes, noses_mouths = [], [], []
+                origin_forehead, origin_left_eye_region, origin_right_eye_region, origin_nose, origin_lips, origin_landmarks = [], [], [], [], [], []
                 for item_idx in range(params.batch_size):
-                    faces_i, lips_i, landmarks_i = \
-                        Dataset.upload(f"{params.dataset_path}/{item_names[batch_idx * params.batch_size + item_idx]}")
-                    origin_faces.append(torch.tensor(faces_i))
-                    origin_lips.append(torch.tensor(lips_i))
-                    landmarks_tensor = torch.tensor(landmarks_i)
+                    data_item = Dataset.upload(f"{params.dataset_path}/{item_names[batch_idx * params.batch_size + item_idx]}")
+                    origin_forehead.append(torch.tensor(data_item["forehead"]))
+                    origin_left_eye_region.append(torch.tensor(data_item["left_eye_region"]))
+                    origin_right_eye_region.append(torch.tensor(data_item["right_eye_region"]))
+                    origin_nose.append(torch.tensor(data_item["nose"]))
+                    origin_lips.append(torch.tensor(data_item["lips"]))
+                    landmarks_tensor = torch.tensor(data_item["landmarks"])
                     origin_landmarks.append(landmarks_tensor)
                     left_eye, right_eye, nose_mouth = divide_landmarks(landmarks_tensor)
                     left_eyes.append(left_eye)
                     right_eyes.append(right_eye)
                     noses_mouths.append(nose_mouth)
                     counter += 1
-                origin_faces = torch.stack(origin_faces)
+                origin_forehead = torch.stack(origin_forehead)
+                origin_left_eye_region = torch.stack(origin_left_eye_region)
+                origin_right_eye_region = torch.stack(origin_right_eye_region)
+                origin_nose = torch.stack(origin_nose)
                 origin_lips = torch.stack(origin_lips)
                 origin_landmarks = torch.stack(origin_landmarks)
                 left_eyes = torch.stack(left_eyes)[:, :, :2] + noise[:, :11]
                 right_eyes = torch.stack(right_eyes)[:, :, :2] + noise[:, 11:22]
                 noses_mouths = torch.stack(noses_mouths)[:, :, :2] + noise[:, 22:]
                 if self.cuda:
-                    origin_faces = origin_faces.cuda()
+                    origin_forehead = origin_forehead.cuda()
+                    origin_left_eye_region = origin_left_eye_region.cuda()
+                    origin_right_eye_region = origin_right_eye_region.cuda()
+                    origin_nose = origin_nose.cuda()
                     origin_lips = origin_lips.cuda()
                     origin_landmarks = origin_landmarks.cuda()
                     left_eyes = left_eyes.cuda()
@@ -187,17 +212,31 @@ class VideoModel:
                 generated_vertices, generated_landmarks = train_flame_model.generate(
                     default_shape, torch.cat([default_position,
                                               output[:, 100][:, None], default_jaw], dim=1), output[:, :100])
-                loss = params.face_loss_coefficient * torch.mean(torch.sum(
-                    torch.linalg.norm(origin_faces - generated_vertices[:, self.face_mask], dim=2), dim=1)) + \
-                       params.lips_loss_coefficient * torch.mean(torch.sum(
-                    torch.linalg.norm(origin_lips - generated_vertices[:, self.lips_mask], dim=2), dim=1)) + \
-                       params.landmarks_loss_coefficient * torch.mean(torch.sum(
-                    torch.linalg.norm(origin_landmarks[:, FACIAL_LANDMARKS] - generated_landmarks[:, FACIAL_LANDMARKS], dim=2), dim=1)) + \
-                       params.mouth_landmarks_loss_coefficient * torch.mean(torch.sum(
+                landmarks_loss = params.left_eye_landmarks_loss_coefficient * torch.mean(torch.sum(
+                    torch.linalg.norm(origin_landmarks[:, [*LEFT_EYE_LANDMARKS, *LEFT_EYEBROW_LANDMARKS]] - generated_landmarks[:, [*LEFT_EYE_LANDMARKS, *LEFT_EYEBROW_LANDMARKS]], dim=2), dim=1)) + \
+                                 params.right_eye_landmarks_loss_coefficient * torch.mean(torch.sum(
+                    torch.linalg.norm(origin_landmarks[:, [*RIGHT_EYE_LANDMARKS, *RIGHT_EYEBROW_LANDMARKS]] - generated_landmarks[:, [*RIGHT_EYE_LANDMARKS, *RIGHT_EYEBROW_LANDMARKS]], dim=2),dim=1)) + \
+                                 params.nose_landmarks_loss_coefficient * torch.mean(torch.sum(
+                    torch.linalg.norm(origin_landmarks[:, NOSE_LANDMARKS] - generated_landmarks[:, NOSE_LANDMARKS], dim=2), dim=1)) + \
+                                 params.lips_landmarks_loss_coefficient * torch.mean(torch.sum(
                     torch.linalg.norm(origin_landmarks[:, MOUTH_LANDMARKS] - generated_landmarks[:, MOUTH_LANDMARKS], dim=2), dim=1)) + \
-                       params.regularization * torch.linalg.norm(output)
-                bar.set_loss(loss)
-                loss.backward()
+                                 params.jaw_landmarks_loss_coefficient * torch.mean(torch.sum(
+                    torch.linalg.norm(origin_landmarks[:, JAW_LANDMARKS] - generated_landmarks[:, JAW_LANDMARKS], dim=2), dim=1))
+
+                vertices_loss = params.forehead_vertices_loss_coefficient * torch.mean(torch.sum(
+                    torch.linalg.norm(origin_forehead - generated_vertices[:, self.masks.forehead], dim=2), dim=1)) + \
+                                params.left_eye_vertices_loss_coefficient * torch.mean(torch.sum(
+                    torch.linalg.norm(origin_left_eye_region - generated_vertices[:, self.masks.left_eye_region], dim=2), dim=1)) + \
+                                params.right_eye_vertices_loss_coefficient * torch.mean(torch.sum(
+                    torch.linalg.norm(origin_right_eye_region - generated_vertices[:, self.masks.right_eye_region], dim=2), dim=1)) + \
+                                params.nose_vertices_loss_coefficient * torch.mean(torch.sum(
+                    torch.linalg.norm(origin_nose - generated_vertices[:, self.masks.nose], dim=2), dim=1)) + \
+                                params.lips_vertices_loss_coefficient * torch.mean(torch.sum(
+                    torch.linalg.norm(origin_lips - generated_vertices[:, self.masks.lips], dim=2), dim=1))
+
+                overall_loss = landmarks_loss + vertices_loss + params.regularization * torch.linalg.norm(output)
+                bar.set_loss(overall_loss)
+                overall_loss.backward()
                 optimizer.step()
                 bar.next(params.batch_size)
                 if counter > params.decay_frequency:
@@ -207,31 +246,39 @@ class VideoModel:
         print("Finished training")
 
         test_start = num_train_batches * params.batch_size
-        loss = 0
+        overall_loss = 0
         bar = Bar('Testing progress', max=num_test_batches * params.batch_size, check_tty=False)
         print("Started evaluating test data")
         for batch_idx in range(num_test_batches):
-            left_eyes, right_eyes, noses_mouths, origin_faces, origin_lips, origin_landmarks = [], [], [], [], [], []
+            left_eyes, right_eyes, noses_mouths = [], [], []
+            origin_forehead, origin_left_eye_region, origin_right_eye_region, origin_nose, origin_lips, origin_landmarks = [], [], [], [], [], []
             for item_idx in range(params.batch_size):
-                faces_i, lips_i, landmarks_i = \
-                    Dataset.upload(f"{params.dataset_path}/"
-                                   f"{item_names[test_start + batch_idx * params.batch_size + item_idx]}")
-                origin_faces.append(torch.tensor(faces_i))
-                origin_lips.append(torch.tensor(lips_i))
-                landmarks_tensor = torch.tensor(landmarks_i)
+                data_item = Dataset.upload(f"{params.dataset_path}/{item_names[test_start + batch_idx * params.batch_size + item_idx]}")
+                origin_forehead.append(torch.tensor(data_item["forehead"]))
+                origin_left_eye_region.append(torch.tensor(data_item["left_eye_region"]))
+                origin_right_eye_region.append(torch.tensor(data_item["right_eye_region"]))
+                origin_nose.append(torch.tensor(data_item["nose"]))
+                origin_lips.append(torch.tensor(data_item["lips"]))
+                landmarks_tensor = torch.tensor(data_item["landmarks"])
                 origin_landmarks.append(landmarks_tensor)
                 left_eye, right_eye, nose_mouth = divide_landmarks(landmarks_tensor)
                 left_eyes.append(left_eye)
                 right_eyes.append(right_eye)
                 noses_mouths.append(nose_mouth)
-            origin_faces = torch.stack(origin_faces)
+            origin_forehead = torch.stack(origin_forehead)
+            origin_left_eye_region = torch.stack(origin_left_eye_region)
+            origin_right_eye_region = torch.stack(origin_right_eye_region)
+            origin_nose = torch.stack(origin_nose)
             origin_lips = torch.stack(origin_lips)
             origin_landmarks = torch.stack(origin_landmarks)
             left_eyes = torch.stack(left_eyes)[:, :, :2]
             right_eyes = torch.stack(right_eyes)[:, :, :2]
             noses_mouths = torch.stack(noses_mouths)[:, :, :2]
             if self.cuda:
-                origin_faces = origin_faces.cuda()
+                origin_forehead = origin_forehead.cuda()
+                origin_left_eye_region = origin_left_eye_region.cuda()
+                origin_right_eye_region = origin_right_eye_region.cuda()
+                origin_nose = origin_nose.cuda()
                 origin_lips = origin_lips.cuda()
                 origin_landmarks = origin_landmarks.cuda()
                 left_eyes = left_eyes.cuda()
@@ -241,45 +288,65 @@ class VideoModel:
             generated_vertices, generated_landmarks = train_flame_model.generate(
                 default_shape, torch.cat([default_position,
                                           output[:, 100][:, None], default_jaw], dim=1), output[:, :100])
-            loss += params.face_loss_coefficient * torch.mean(torch.sum(
-                    torch.linalg.norm(origin_faces - generated_vertices[:, self.face_mask], dim=2), dim=1)) + \
-                       params.lips_loss_coefficient * torch.mean(torch.sum(
-                    torch.linalg.norm(origin_lips - generated_vertices[:, self.lips_mask], dim=2), dim=1)) + \
-                       params.landmarks_loss_coefficient * torch.mean(torch.sum(
-                    torch.linalg.norm(origin_landmarks[:, FACIAL_LANDMARKS] - generated_landmarks[:, FACIAL_LANDMARKS], dim=2), dim=1)) + \
-                       params.mouth_landmarks_loss_coefficient * torch.mean(torch.sum(
-                    torch.linalg.norm(origin_landmarks[:, MOUTH_LANDMARKS] - generated_landmarks[:, MOUTH_LANDMARKS], dim=2), dim=1)) + \
-                       params.regularization * torch.linalg.norm(output)
+            landmarks_loss = params.left_eye_landmarks_loss_coefficient * torch.mean(torch.sum(
+                torch.linalg.norm(origin_landmarks[:, [*LEFT_EYE_LANDMARKS, *LEFT_EYEBROW_LANDMARKS]] - generated_landmarks[:, [*LEFT_EYE_LANDMARKS, *LEFT_EYEBROW_LANDMARKS]], dim=2), dim=1)) + \
+                             params.right_eye_landmarks_loss_coefficient * torch.mean(torch.sum(
+                torch.linalg.norm(origin_landmarks[:, [*RIGHT_EYE_LANDMARKS, *RIGHT_EYEBROW_LANDMARKS]] - generated_landmarks[:, [*RIGHT_EYE_LANDMARKS, *RIGHT_EYEBROW_LANDMARKS]], dim=2), dim=1)) + \
+                             params.nose_landmarks_loss_coefficient * torch.mean(torch.sum(
+                torch.linalg.norm(origin_landmarks[:, NOSE_LANDMARKS] - generated_landmarks[:, NOSE_LANDMARKS], dim=2), dim=1)) + \
+                             params.lips_landmarks_loss_coefficient * torch.mean(torch.sum(
+                torch.linalg.norm(origin_landmarks[:, MOUTH_LANDMARKS] - generated_landmarks[:, MOUTH_LANDMARKS], dim=2), dim=1)) + \
+                             params.jaw_landmarks_loss_coefficient * torch.mean(torch.sum(
+                torch.linalg.norm(origin_landmarks[:, JAW_LANDMARKS] - generated_landmarks[:, JAW_LANDMARKS], dim=2), dim=1))
+
+            vertices_loss = params.forehead_vertices_loss_coefficient * torch.mean(torch.sum(
+                torch.linalg.norm(origin_forehead - generated_vertices[:, self.masks.forehead], dim=2), dim=1)) + \
+                            params.left_eye_vertices_loss_coefficient * torch.mean(torch.sum(
+                torch.linalg.norm(origin_left_eye_region - generated_vertices[:, self.masks.left_eye_region], dim=2), dim=1)) + \
+                            params.right_eye_vertices_loss_coefficient * torch.mean(torch.sum(
+                torch.linalg.norm(origin_right_eye_region - generated_vertices[:, self.masks.right_eye_region], dim=2), dim=1)) + \
+                            params.nose_vertices_loss_coefficient * torch.mean(torch.sum(
+                torch.linalg.norm(origin_nose - generated_vertices[:, self.masks.nose], dim=2), dim=1)) + \
+                            params.lips_vertices_loss_coefficient * torch.mean(torch.sum(
+                torch.linalg.norm(origin_lips - generated_vertices[:, self.masks.lips], dim=2), dim=1))
+
+            overall_loss += landmarks_loss + vertices_loss + params.regularization * torch.linalg.norm(output)
             bar.next(params.batch_size)
         bar.finish()
         print("Finished testing")
-        print(f"Test loss = {loss / num_test_batches:.4f}")
+        print(f"Test loss = {overall_loss / num_test_batches:.4f}")
 
         torch.save(self.torch_model.state_dict(),
                    f"{params.output_weights_path}/video_model_{params.epoch_number}_"
                    f"{num_train_batches * params.batch_size}_"
-                   f"{''.join(random.choices(string.ascii_letters + string.digits, k=15))}.pt")
+                   f"{datetime.now().strftime('%d.%m.%Y-%H.%M.%S')}.pt")
         print(f"Model has been saved to {params.output_weights_path}")
 
 
 if __name__ == "__main__":
     pass
     params = VideoModelTrainParams(
-        dataset_path=f"{PROJECT_DIR}/video_animation/dataset/train_data",
+        dataset_path=f"{PROJECT_DIR}/video_animation/dataset/train_data_4",
         output_weights_path=f"{PROJECT_DIR}/video_animation/weights",
-        train_percentage=0.97,
+        train_percentage=0.99,
         epoch_number=1,
-        batch_size=100,
+        batch_size=200,
         learning_rate=1e-3,
-        decay_rate=0.98,
+        decay_rate=0.99,
         decay_frequency=10000,
         noise_level=1e-3,
         regularization=1e-4,
         weight_decay=0.0,
-        face_loss_coefficient=1.0,
-        landmarks_loss_coefficient=1.0,
-        lips_loss_coefficient=1.0,
-        mouth_landmarks_loss_coefficient=1.0
+        left_eye_landmarks_loss_coefficient=1.0,
+        right_eye_landmarks_loss_coefficient=1.0,
+        nose_landmarks_loss_coefficient=1.0,
+        lips_landmarks_loss_coefficient=1.0,
+        jaw_landmarks_loss_coefficient=1.0,
+        forehead_vertices_loss_coefficient=1.0,
+        left_eye_vertices_loss_coefficient=1.0,
+        right_eye_vertices_loss_coefficient=1.0,
+        nose_vertices_loss_coefficient=1.0,
+        lips_vertices_loss_coefficient=1.0
     )
     video_model = VideoModel(cuda=True)
     video_model.train(params)

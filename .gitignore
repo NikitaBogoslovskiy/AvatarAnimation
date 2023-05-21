@@ -161,6 +161,9 @@ cython_debug/
 
 video_animation/dataset/train_data/*
 !video_animation/dataset/train_data/.gitkeep
+video_animation/dataset/train_data_0/*
+video_animation/dataset/train_data_2/*
+video_animation/dataset/train_data_3/*
 video_animation/detector/shape_predictor.dat
 
 audio_animation/deepspeech/models/*
@@ -170,4 +173,8 @@ audio_animation/dataset/raw_data/*
 !audio_animation/dataset/raw_data/.gitkeep
 audio_animation/dataset/train_data/*
 !audio_animation/dataset/train_data/.gitkeep
+audio_animation/dataset/train_data_new/*
+!audio_animation/dataset/train_data_new/.gitkeep
+audio_animation/dataset/backlog/*
+!audio_animation/dataset/backlog/.gitkeep
 
