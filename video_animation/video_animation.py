@@ -17,7 +17,7 @@ from video_animation.concurrent.detection import transform_frame_to_landmarks
 
 
 class VideoAnimation:
-    def __init__(self, cuda=True, offline_mode_batch_size=100, show_detection_results=True):
+    def __init__(self, cuda=True, offline_mode_batch_size=100, show_detection_results=False, logging=True):
         self.video_stream = None
         self.video_mode = None
         self.online_visualizer = None
@@ -27,6 +27,7 @@ class VideoAnimation:
         self.detector = Detector()
         self.cuda = cuda
         self.show_detection_results = show_detection_results
+        self.logging = logging
         self.video_model = VideoModel(self.cuda)
         self.video_model.load_model(
             weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_1_98800_20.05.2023-23.02.10.pt")
@@ -44,8 +45,20 @@ class VideoAnimation:
         self.smoothing_level = 2
         self.weights = [0.3, 0.7]
         self.last_landmarks = deque()
-
         self.last_vertices = deque()
+        self.repeated_human_neutral_landmarks = None
+        self.landmarks_list = None
+        self.processes_number = None
+        self.repeated_model_neutral_landmarks = None
+        self.repeated_vertices = None
+        self.landmarks_queue = None
+        self.frames_queue = None
+        self.frames = None
+        self.processes = None
+        self.ready_to_render_queue = None
+        self.rendering = None
+        self.repeated_neutral_landmarks = None
+        self.landmarks_dirs = None
 
     def set_video(self, video_path=0):
         if video_path == 0:
@@ -73,6 +86,8 @@ class VideoAnimation:
         self.video_model.init_for_execution(batch_size=self.offline_mode_batch_size)
 
     def init_concurrent_mode(self, processes_number=8):
+        if self.logging:
+            print("Initializing concurrent mode... ", end='')
         self.repeated_human_neutral_landmarks = torch.Tensor(self.neutral_landmarks)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
         if self.cuda:
             self.repeated_human_neutral_landmarks = self.repeated_human_neutral_landmarks.cuda()
@@ -87,11 +102,17 @@ class VideoAnimation:
         for process_idx in range(self.processes_number):
             self.processes.append(Process(target=transform_frame_to_landmarks, args=(self.frames_queue, self.landmarks_queue)))
             self.processes[process_idx].start()
+        if self.logging:
+            print("Done.")
 
     def init_concurrent_rendering(self):
+        if self.logging:
+            print("Initializing concurrent rendering... ", end='')
         self.ready_to_render_queue = Queue()
         self.rendering = Process(target=render_sequentially, args=(self.visualizer_params, self.ready_to_render_queue, ))
         self.rendering.start()
+        if self.logging:
+            print("Done.")
 
     def release_concurrent_mode(self):
         for process_idx in range(self.processes_number):
@@ -147,7 +168,8 @@ class VideoAnimation:
         pre_weights_list = []
         pre_template_tensor = np.ones_like(self.neutral_landmarks)
         for w in self.weights:
-            pre_weights_list.append((pre_template_tensor * w)[None, :])
+            weighted_tensor = pre_template_tensor * w
+            pre_weights_list.append(weighted_tensor[None, :])
         self.pre_weights = np.concatenate(pre_weights_list)
 
     def _set_post_weights_online(self):
@@ -155,29 +177,53 @@ class VideoAnimation:
 
     def capture_neutral_face(self, photo_path=None):
         if self.video_mode == VideoMode.ONLINE:
-            neutral_face_image = self._capture_neutral_face_from_video()
+            enter_pressed = False
+            while True:
+                ret, frame = self.video_stream.read()
+                self.detector.get_image(frame)
+                box_found, rect = self.detector.detect_face()
+                if box_found:
+                    self.detector.visualize_bounding_box()
+                cv2.imshow('Press "Enter" to capture neutral face', self.detector.image)
+                if cv2.waitKey(1) == 13:
+                    enter_pressed = True
+                if enter_pressed and box_found:
+                    landmarks = self.detector.detect_landmarks()
+                    if landmarks.shape[0] == 0:
+                        continue
+                    self.neutral_landmarks = align_landmarks(landmarks)
+                    break
+            cv2.destroyAllWindows()
         else:
             neutral_face_image = self._capture_neutral_face_from_photo(photo_path)
-        self.detector.get_image(neutral_face_image)
-        b, rect = self.detector.detect_face()
-        if b:
-            landmarks = self.detector.detect_landmarks()
-            self.neutral_landmarks = align_landmarks(landmarks)
-        if self.video_mode == VideoMode.ONLINE:
-            cv2.destroyAllWindows()
+            self.detector.get_image(neutral_face_image)
+            box_found, rect = self.detector.detect_face()
+            if box_found:
+                landmarks = self.detector.detect_landmarks()
+                if landmarks.shape[0] == 0:
+                    print("Error: cannot detect facial landmarks on photo")
+                    exit(-1)
+                self.neutral_landmarks = align_landmarks(landmarks)
+            else:
+                print("Error: cannot find face on photo")
+                exit(-1)
 
     def _capture_neutral_face_from_video(self):
+        enter_pressed = False
         while True:
             ret, frame = self.video_stream.read()
             self.detector.get_image(frame)
-            b, rect = self.detector.detect_face()
-            if b:
+            found, rect = self.detector.detect_face()
+            if found:
                 self.detector.visualize_bounding_box()
             cv2.imshow('Press "Enter" to capture neutral face', self.detector.image)
             if cv2.waitKey(1) == 13:
+                enter_pressed = True
+            if enter_pressed and found:
                 return frame
 
-    def _capture_neutral_face_from_photo(self, photo_path):
+    @staticmethod
+    def _capture_neutral_face_from_photo(photo_path):
         if not os.path.isfile(photo_path):
             raise FileNotFoundError("Photo path is incorrect")
         photo = cv2.imread(photo_path)
@@ -228,7 +274,8 @@ class VideoAnimation:
         frames_number = int(self.video_stream.get(cv2.CAP_PROP_FRAME_COUNT)) - int(self.video_stream.get(cv2.CAP_PROP_POS_FRAMES))
         batch_num = frames_number // self.offline_mode_batch_size
         current_batch_size = self.offline_mode_batch_size
-        bar = Bar('Video processing', max=frames_number, check_tty=False)
+        if self.logging:
+            bar = Bar('Video processing', max=frames_number, check_tty=False)
         iterations_number = batch_num + 1 if frames_number % self.offline_mode_batch_size != 0 else batch_num
         self._set_pre_weights_offline()
         self._set_post_weights_offline()
@@ -255,11 +302,13 @@ class VideoAnimation:
                     self.frames[frame_idx] = self.frames[frame_idx - 1]
                 self.frames_queue.put((frame_idx, self.frames[frame_idx]))
             processed_number = self.landmarks_queue.qsize()
-            bar.next(processed_number)
+            if self.logging:
+                bar.next(processed_number)
             while True:
                 current_size = self.landmarks_queue.qsize()
                 if current_size != processed_number:
-                    bar.next(current_size - processed_number)
+                    if self.logging:
+                        bar.next(current_size - processed_number)
                     processed_number = current_size
                 if current_size == current_batch_size:
                     break
@@ -307,7 +356,8 @@ class VideoAnimation:
                     self.last_vertices[-1] = self.repeated_vertices[vertices_idx][None, :]
             yield current_batch_size, self.repeated_vertices.cpu(), self.frames
 
-        bar.finish()
+        if self.logging:
+            bar.finish()
         yield None, None, None
 
     # TODO: Need refactoring
@@ -387,14 +437,18 @@ class VideoAnimation:
                 output_vertices = output_vertices.numpy().squeeze()
                 for idx in range(current_batch_size):
                     self.ready_to_render_queue.put((output_vertices[idx], input_frames[idx]))
-            print("Rendering...")
+            if self.logging:
+                print("Rendering... ", end='')
             while self.ready_to_render_queue.qsize() != 0:
                 pass
-            print("Done.")
+            if self.logging:
+                print("Done.")
             self.release_concurrent_mode()
             self.release_concurrent_rendering()
 
     def stop(self):
+        if self.logging and self.video_mode == VideoMode.OFFLINE:
+            print(f"Output video has been saved to '{self.visualizer_params.save_path}'")
         if self.online_visualizer is not None:
             self.online_visualizer.release()
         self.video_stream.release()
