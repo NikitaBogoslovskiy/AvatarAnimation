@@ -8,7 +8,10 @@ from audio_animation.wav2vec2.voice_processor import VoiceProcessor
 
 
 class AudioAnimation:
-    def __init__(self, cuda=True):
+    def __init__(self, cuda=True, logging=True):
+        self.logging = logging
+        if self.logging:
+            print("Preparing for animation... ", end='')
         self.visualizer = None
         self.input_audio_path = None
         self.voice_processor = VoiceProcessor(cuda)
@@ -46,13 +49,15 @@ class AudioAnimation:
         self.visualizer.release()
         add_audio_to_video(input_video_path=self.output_video_path_without_audio, audio_path=self.input_audio_path, output_video_path=self.output_video_path_with_audio)
         os.remove(self.output_video_path_without_audio)
-        print(f"Output animation video has been saved to '{self.output_video_path_with_audio}'")
+        if self.logging:
+            print(f"Output animation video has been saved to '{self.output_video_path_with_audio}'")
 
     def animate_mesh(self, resolution=(512, 512)):
         self._init_visualizer(resolution)
         processed_features = self.audio_model.execute(self.execution_params)
-        print("Started rendering video with animation...")
-        bar = Bar('Video rendering', max=self.execution_params.audio_features.size()[1], check_tty=False)
+        if self.logging:
+            print("Done.")
+            bar = Bar('Audio processing', max=self.execution_params.audio_features.size()[1], check_tty=False)
         while True:
             current_batch_size, output_vertices = next(processed_features)
             if current_batch_size is None:
@@ -60,7 +65,8 @@ class AudioAnimation:
             output_vertices = output_vertices.numpy().squeeze()
             for idx in range(current_batch_size):
                 self.visualizer.render(output_vertices[idx])
-                bar.next()
-        bar.finish()
-        print("Done.")
+                if self.logging:
+                    bar.next()
+        if self.logging:
+            bar.finish()
         self._release_visualizer()

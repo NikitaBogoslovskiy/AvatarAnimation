@@ -5,8 +5,7 @@ import json
 from FLAME.config import get_config
 from progress.bar import Bar
 from FLAME.flame_model import RADIAN
-from utils.landmarks import align_landmarks
-from FLAME.utils import upload_face_mask, upload_lips_mask, upload_masks
+from FLAME.utils import upload_masks
 
 JAW_ARTICULATION_PROBABILITY = 0.1
 

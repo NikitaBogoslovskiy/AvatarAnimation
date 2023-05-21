@@ -12,13 +12,13 @@ class VideoAnimationParams:
 
 
 def video_animation_pipeline(params: VideoAnimationParams, output_queue):
-    animation = VideoAnimation(cuda=params.cuda)
+    animation = VideoAnimation(cuda=params.cuda, logging=False)
     animation.set_video(video_path=params.video_path)
     if params.neutral_face_path is None:
         animation.set_current_neutral_face()
     else:
         animation.capture_neutral_face(photo_path=params.neutral_face_path)
-    animation.init_concurrent_mode(processes_number=7)
+    animation.init_concurrent_mode(processes_number=6)
     processed_frames = animation.process_frames_concurrently()
     frame_idx = 0
     while True:

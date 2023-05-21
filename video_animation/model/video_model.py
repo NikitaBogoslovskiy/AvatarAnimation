@@ -7,13 +7,12 @@ from os import walk
 import torch
 import random
 from video_animation.dataset.dataset import Dataset
-from utils.landmarks import divide_landmarks, FACIAL_LANDMARKS, MOUTH_LANDMARKS, LEFT_EYE_LANDMARKS, LEFT_EYEBROW_LANDMARKS, RIGHT_EYE_LANDMARKS, RIGHT_EYEBROW_LANDMARKS, NOSE_LANDMARKS, JAW_LANDMARKS
+from utils.landmarks import divide_landmarks, MOUTH_LANDMARKS, LEFT_EYE_LANDMARKS, LEFT_EYEBROW_LANDMARKS, RIGHT_EYE_LANDMARKS, RIGHT_EYEBROW_LANDMARKS, NOSE_LANDMARKS, JAW_LANDMARKS
 from FLAME.flame_model import FlameModel
 from FLAME.utils import upload_face_mask, upload_lips_mask, upload_masks
 from FLAME.config import get_config
 from progress.bar import Bar
 from utils.progress_bar import TrainingBar
-import string
 from FLAME.flame_model import RADIAN
 
 
@@ -71,7 +70,7 @@ class VideoModelExecuteParams:
                  expr_min=-2.5,
                  expr_max=2.5,
                  jaw_min=0.0,
-                 jaw_max=2.5 * RADIAN):
+                 jaw_max=2.0 * RADIAN):
         self.left_eye = left_eye
         self.right_eye = right_eye
         self.nose_mouth = nose_mouth

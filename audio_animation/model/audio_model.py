@@ -375,5 +375,4 @@ if __name__ == "__main__":
         weight_decay=0.0
     )
     audio_model = AudioModel(cuda=True)
-    # audio_model.load_model(f"{PROJECT_DIR}/audio_animation/weights/audio_model_10_780_14.05.2023-14.08.46.pt")
     audio_model.train(params)

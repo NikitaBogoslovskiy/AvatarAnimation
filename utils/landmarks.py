@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-from video_animation.detector.detector import Detector
 
 LEFT_EYEBROW_LANDMARKS = [17, 18, 19, 20, 21]
 LEFT_EYE_LANDMARKS = [36, 37, 38, 39, 40, 41]

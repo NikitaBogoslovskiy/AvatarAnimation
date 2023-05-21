@@ -17,7 +17,7 @@ class AudioAnimationParams:
 
 
 def audio_animation_pipeline(params: AudioAnimationParams, output_queue):
-    animation = AudioAnimation(cuda=params.cuda)
+    animation = AudioAnimation(cuda=params.cuda, logging=False)
     animation.set_audio(audio_path=params.audio_path, audio_features=params.audio_features)
     processed_features = animation.audio_model.execute(animation.execution_params)
     need_adaptation = True
