@@ -15,7 +15,7 @@ def transform_frame_to_landmarks(input_queue, output_queue):
         local_detector.get_image(frame)
         found, rect = local_detector.detect_face()
         if not found:
-            output_queue.put((frame_idx, None))
+            output_queue.put((frame_idx, None, None))
             continue
         local_detector.visualize_bounding_box()
         landmarks = local_detector.detect_landmarks()
