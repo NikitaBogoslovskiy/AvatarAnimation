@@ -3,11 +3,12 @@ import torch
 from video_animation.detector.detector import Detector
 import cv2
 from video_animation.model.video_model import VideoModel, VideoModelExecuteParams
+from video_animation.visualizer.offline_visualizer import OfflineVisualizer
 from video_animation.visualizer.online_visualizer import OnlineVisualizer
 import numpy as np
 from utils.landmarks import align_landmarks, divide_landmarks, LEFT_EYE_LANDMARKS, LEFT_EYEBROW_LANDMARKS, \
     RIGHT_EYEBROW_LANDMARKS, RIGHT_EYE_LANDMARKS, MOUTH_LANDMARKS, NOSE_LANDMARKS, JAW_LANDMARKS, divide_landmarks_batch
-from utils.video_settings import VideoMode
+from utils.video_settings import VideoMode, OfflineMode
 import os
 from multiprocessing import Process, Queue
 from progress.bar import Bar
@@ -17,12 +18,14 @@ from video_animation.concurrent.detection import transform_frame_to_landmarks
 
 
 class VideoAnimation:
-    def __init__(self, cuda=True, offline_mode_batch_size=100, show_detection_results=False, logging=True):
+    def __init__(self, cuda=True, offline_mode_batch_size=100, show_detection_results=True, logging=True):
         self.video_stream = None
         self.video_mode = None
         self.online_visualizer = None
+        self.offline_visualizer = None
         self.visualizer_params = None
         self.neutral_landmarks = None
+        self.offline_mode = OfflineMode.CONCURRENT
         self.offline_mode_batch_size = offline_mode_batch_size
         self.detector = Detector()
         self.cuda = cuda
@@ -30,7 +33,7 @@ class VideoAnimation:
         self.logging = logging
         self.video_model = VideoModel(self.cuda)
         self.video_model.load_model(
-            weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_1_98800_20.05.2023-23.02.10.pt")
+            weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_1_98800_12.06.2023-01.09.15.pt")
         self.landmarks_sum = np.zeros((68, 2))
         self.landmarks_history = deque()
         self.local_counter = 0
@@ -91,7 +94,7 @@ class VideoAnimation:
         self.repeated_human_neutral_landmarks = torch.Tensor(self.neutral_landmarks)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
         if self.cuda:
             self.repeated_human_neutral_landmarks = self.repeated_human_neutral_landmarks.cuda()
-        self.landmarks_list = [torch.Tensor(self.neutral_landmarks)[None, ]] * self.offline_mode_batch_size
+        self.landmarks_list = [torch.Tensor(self.neutral_landmarks)[None,]] * self.offline_mode_batch_size
         self.processes_number = processes_number
         self.repeated_model_neutral_landmarks = self.video_model.neutral_landmarks[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
         self.repeated_vertices = torch.Tensor(self.video_model.neutral_vertices)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
@@ -105,35 +108,56 @@ class VideoAnimation:
         if self.logging:
             print("Done.")
 
-    def init_concurrent_rendering(self):
-        if self.logging:
-            print("Initializing concurrent rendering... ", end='')
-        self.ready_to_render_queue = Queue()
-        self.rendering = Process(target=render_sequentially, args=(self.visualizer_params, self.ready_to_render_queue, ))
-        self.rendering.start()
-        if self.logging:
-            print("Done.")
-
     def release_concurrent_mode(self):
         for process_idx in range(self.processes_number):
             self.frames_queue.put(-1)
         for process_idx in range(self.processes_number):
             self.processes[process_idx].join()
 
+    def init_concurrent_rendering(self):
+        if self.logging:
+            print("Initializing concurrent rendering... ", end='')
+        self.ready_to_render_queue = Queue()
+        self.rendering = Process(target=render_sequentially, args=(self.visualizer_params, self.ready_to_render_queue,))
+        self.rendering.start()
+        if self.logging:
+            print("Done.")
+
     def release_concurrent_rendering(self):
         self.ready_to_render_queue.put(-1)
         self.rendering.join()
 
     def init_sequential_mode(self):
-        self.repeated_neutral_landmarks = self.video_model.neutral_landmarks[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
-        self.repeated_vertices = torch.Tensor(self.video_model.neutral_vertices)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
+        if self.logging:
+            print("Initializing sequential mode... ", end='')
+        self.repeated_human_neutral_landmarks = torch.Tensor(self.neutral_landmarks)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
         if self.cuda:
-            self.repeated_vertices = self.repeated_vertices.cuda()
-        self.landmarks_dirs = [torch.zeros_like(torch.Tensor(self.neutral_landmarks)[None,])] * self.offline_mode_batch_size
+            self.repeated_human_neutral_landmarks = self.repeated_human_neutral_landmarks.cuda()
+        self.repeated_model_neutral_landmarks = self.video_model.neutral_landmarks[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
+        self.repeated_vertices = torch.Tensor(self.video_model.neutral_vertices)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
+        # if self.cuda:
+        #     self.repeated_vertices = self.repeated_vertices.cuda()
+        self.landmarks_list = [torch.zeros_like(torch.Tensor(self.neutral_landmarks)[None,])] * self.offline_mode_batch_size
         self.frames = [None] * self.offline_mode_batch_size
+        if self.logging:
+            print("Done.")
 
     def release_sequential_mode(self):
         pass
+
+    def init_sequential_rendering(self):
+        if self.logging:
+            print("Initializing sequential rendering... ", end='')
+        self.offline_visualizer = OfflineVisualizer(self.visualizer_params.save_path)
+        self.offline_visualizer.set_surfaces(self.visualizer_params.surfaces)
+        self.offline_visualizer.init_settings(animation_resolution=(self.visualizer_params.height, self.visualizer_params.height),
+                                              input_resolution=(self.visualizer_params.width, self.visualizer_params.height),
+                                              frame_rate=self.visualizer_params.frame_rate)
+        if self.logging:
+            print("Done.")
+
+    def release_sequential_rendering(self):
+        self.offline_visualizer.release()
 
     def set_current_video(self, video_path):
         self.video_stream = cv2.VideoCapture(video_path)
@@ -322,7 +346,7 @@ class VideoAnimation:
                 if frame_idx != 0:
                     self.landmarks_list[frame_idx] = self.landmarks_list[frame_idx - 1]
                 else:
-                    self.landmarks_list[frame_idx] = torch.Tensor(self.neutral_landmarks)[None, ]
+                    self.landmarks_list[frame_idx] = torch.Tensor(self.neutral_landmarks)[None,]
             landmarks_tensor = torch.cat(self.landmarks_list)
             if self.cuda:
                 landmarks_tensor = landmarks_tensor.cuda()
@@ -335,7 +359,7 @@ class VideoAnimation:
                     landmarks_tensor[landmarks_idx] = torch.sum(torch.cat(list(self.last_landmarks)) * self.pre_weights, dim=0)
                     self.last_landmarks[-1] = landmarks_tensor[landmarks_idx][None, :]
             difference_tensor = landmarks_tensor - self.repeated_human_neutral_landmarks[:, :, :2]
-            difference_tensor[:, MOUTH_LANDMARKS] *= 1.0
+            # difference_tensor[:, MOUTH_LANDMARKS] *= 1.0
             left_eye_dirs, right_eye_dirs, nose_mouth_dirs = divide_landmarks_batch(difference_tensor)
             if self.cuda:
                 left_eye_dirs = left_eye_dirs.cuda()
@@ -360,54 +384,80 @@ class VideoAnimation:
             bar.finish()
         yield None, None, None
 
-    # TODO: Need refactoring
     def process_frames_sequentially(self):
         frames_number = int(self.video_stream.get(cv2.CAP_PROP_FRAME_COUNT))
         batch_num = frames_number // self.offline_mode_batch_size
         current_batch_size = self.offline_mode_batch_size
         bar = Bar('Video processing', max=frames_number, check_tty=False)
+        self._set_pre_weights_offline()
+        self._set_post_weights_offline()
 
         for batch_idx in range(batch_num + 1):
+            lacking_frames = []
             if batch_idx == batch_num:
                 current_batch_size = frames_number - batch_num * self.offline_mode_batch_size
             for frame_idx in range(current_batch_size):
-                bar.next()
-                _, frame = self.video_stream.read()
-                self.frames[frame_idx] = frame
-                self.detector.get_image(frame)
+                success, frame = self.video_stream.read()
+                if not success:
+                    lacking_frames.append(frame_idx)
+                    self.frames[frame_idx] = None
+                else:
+                    self.frames[frame_idx] = frame
+            for frame_idx in lacking_frames:
+                if frame_idx == 0:
+                    local_idx = 1
+                    while self.frames[local_idx] is None:
+                        local_idx += 1
+                    self.frames[0] = self.frames[local_idx]
+                else:
+                    self.frames[frame_idx] = self.frames[frame_idx - 1]
+            for frame_idx in range(current_batch_size):
+                self.detector.get_image(self.frames[frame_idx])
                 found, rect = self.detector.detect_face()
                 if not found:
                     if frame_idx != 0:
-                        self.landmarks_dirs[frame_idx] = self.landmarks_dirs[frame_idx - 1]
+                        self.landmarks_list[frame_idx] = self.landmarks_list[frame_idx - 1]
                     else:
-                        self.landmarks_dirs[frame_idx] = torch.zeros_like(self.neutral_landmarks)
-                    continue
-                landmarks = self.detector.detect_landmarks()
-                self.detector.visualize_landmarks()
-                landmarks = align_landmarks(landmarks)
-                self.landmarks_history.append(landmarks)
-                self.landmarks_sum += landmarks
-                if self.local_counter == self.landmarks_number:
-                    left_landmarks = self.landmarks_history.popleft()
-                    self.landmarks_sum -= left_landmarks
-                    smoothed_landmarks = self.landmarks_sum / self.landmarks_number
+                        self.landmarks_list[frame_idx] = torch.zeros_like(self.neutral_landmarks)
                 else:
-                    smoothed_landmarks = landmarks
-                    self.local_counter += 1
-                self.landmarks_dirs[frame_idx] = torch.Tensor(smoothed_landmarks - self.neutral_landmarks)[None,]
-
-            left_eye_dirs, right_eye_dirs, nose_mouth_dirs = divide_landmarks_batch(torch.cat(self.landmarks_dirs))
+                    landmarks = self.detector.detect_landmarks()
+                    self.landmarks_list[frame_idx] = torch.Tensor(align_landmarks(landmarks))[None, ]
+                    if self.show_detection_results:
+                        self.detector.visualize_bounding_box()
+                        self.detector.visualize_landmarks()
+                        self.frames[frame_idx] = self.detector.image
+                bar.next()
+            landmarks_tensor = torch.cat(self.landmarks_list)
+            if self.cuda:
+                landmarks_tensor = landmarks_tensor.cuda()
+            for landmarks_idx in range(current_batch_size):
+                if len(self.last_landmarks) < self.smoothing_level:
+                    self.last_landmarks.append(landmarks_tensor[landmarks_idx][None, :])
+                else:
+                    self.last_landmarks.popleft()
+                    self.last_landmarks.append(landmarks_tensor[landmarks_idx][None, :])
+                    landmarks_tensor[landmarks_idx] = torch.sum(torch.cat(list(self.last_landmarks)) * self.pre_weights, dim=0)
+                    self.last_landmarks[-1] = landmarks_tensor[landmarks_idx][None, :]
+            difference_tensor = landmarks_tensor - self.repeated_human_neutral_landmarks[:, :, :2]
+            left_eye_dirs, right_eye_dirs, nose_mouth_dirs = divide_landmarks_batch(difference_tensor)
             if self.cuda:
                 left_eye_dirs = left_eye_dirs.cuda()
                 right_eye_dirs = right_eye_dirs.cuda()
                 nose_mouth_dirs = nose_mouth_dirs.cuda()
-            self.execution_params.left_eye = self.repeated_neutral_landmarks[:, self.left_eye_indices][:, :, :2] + left_eye_dirs
-            self.execution_params.right_eye = self.repeated_neutral_landmarks[:, self.right_eye_indices][:, :, :2] + right_eye_dirs
-            self.execution_params.nose_mouth = self.repeated_neutral_landmarks[:, self.nose_mouth_indices][:, :, :2] + nose_mouth_dirs
+            self.execution_params.left_eye = self.repeated_model_neutral_landmarks[:, self.left_eye_indices][:, :, :2] + left_eye_dirs
+            self.execution_params.right_eye = self.repeated_model_neutral_landmarks[:, self.right_eye_indices][:, :, :2] + right_eye_dirs
+            self.execution_params.nose_mouth = self.repeated_model_neutral_landmarks[:, self.nose_mouth_indices][:, :, :2] + nose_mouth_dirs
             output = self.video_model.execute(self.execution_params)
             self.repeated_vertices[:, self.video_model.face_mask] = output[:, self.video_model.face_mask]
+            for vertices_idx in range(current_batch_size):
+                if len(self.last_vertices) < self.smoothing_level:
+                    self.last_vertices.append(self.repeated_vertices[vertices_idx][None, :])
+                else:
+                    self.last_vertices.popleft()
+                    self.last_vertices.append(self.repeated_vertices[vertices_idx][None, :])
+                    self.repeated_vertices[vertices_idx] = torch.sum(torch.cat(list(self.last_vertices)) * self.post_weights, dim=0)
+                    self.last_vertices[-1] = self.repeated_vertices[vertices_idx][None, :]
             yield current_batch_size, self.repeated_vertices.cpu(), self.frames
-
         bar.finish()
         yield None, None, None
 
@@ -427,24 +477,40 @@ class VideoAnimation:
                 if cv2.waitKey(1) == 27:
                     break
         elif self.video_mode == VideoMode.OFFLINE:
-            self.init_concurrent_mode(processes_number=7)
-            self.init_concurrent_rendering()
-            processed_frames = self.process_frames_concurrently()
-            while True:
-                current_batch_size, output_vertices, input_frames = next(processed_frames)
-                if current_batch_size is None:
-                    break
-                output_vertices = output_vertices.numpy().squeeze()
-                for idx in range(current_batch_size):
-                    self.ready_to_render_queue.put((output_vertices[idx], input_frames[idx]))
-            if self.logging:
-                print("Rendering... ", end='')
-            while self.ready_to_render_queue.qsize() != 0:
-                pass
-            if self.logging:
-                print("Done.")
-            self.release_concurrent_mode()
-            self.release_concurrent_rendering()
+            if self.offline_mode == OfflineMode.CONCURRENT:
+                self.init_concurrent_mode(processes_number=7)
+                self.init_concurrent_rendering()
+                processed_frames = self.process_frames_concurrently()
+                while True:
+                    current_batch_size, output_vertices, input_frames = next(processed_frames)
+                    if current_batch_size is None:
+                        break
+                    output_vertices = output_vertices.numpy().squeeze()
+                    for idx in range(current_batch_size):
+                        self.ready_to_render_queue.put((output_vertices[idx], input_frames[idx]))
+                if self.logging:
+                    print("Rendering... ", end='')
+                while self.ready_to_render_queue.qsize() != 0:
+                    pass
+                if self.logging:
+                    print("Done.")
+                self.release_concurrent_mode()
+                self.release_concurrent_rendering()
+            elif self.offline_mode == OfflineMode.BATCH:
+                self.init_sequential_mode()
+                self.init_sequential_rendering()
+                processed_frames = self.process_frames_sequentially()
+                while True:
+                    current_batch_size, output_vertices, input_frames = next(processed_frames)
+                    if current_batch_size is None:
+                        break
+                    output_vertices = output_vertices.numpy().squeeze()
+                    for idx in range(current_batch_size):
+                        self.offline_visualizer.render(output_vertices[idx], input_frames[idx])
+                if self.logging:
+                    print("Done.")
+                self.release_sequential_mode()
+                self.release_sequential_rendering()
 
     def stop(self):
         if self.logging and self.video_mode == VideoMode.OFFLINE:
