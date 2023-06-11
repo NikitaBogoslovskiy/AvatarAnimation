@@ -3,6 +3,7 @@ import pyrender
 import trimesh
 import matplotlib.pyplot as plt
 from FLAME.flame_model import RADIAN
+import cv2
 
 
 class OnlineVisualizer:
@@ -12,13 +13,13 @@ class OnlineVisualizer:
         camera = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
         light = pyrender.DirectionalLight(color=[255, 255, 255], intensity=5)
         self.scene = pyrender.Scene(ambient_light=[.1, .1, .1], bg_color=[1., 1., 1.])
-        light_rotation_1 = np.array([[np.cos(90 * RADIAN), np.sin(90 * RADIAN), 0, 0],
-                                     [-np.sin(90 * RADIAN), np.cos(90 * RADIAN), 0, 0],
+        light_rotation_1 = np.array([[np.cos(45 * RADIAN), np.sin(45 * RADIAN), 0, 0],
+                                     [-np.sin(45 * RADIAN), np.cos(45 * RADIAN), 0, 0],
                                      [0, 0, 1, 0],
                                      [0, 0, 0, 1]])
-        light_rotation_2 = np.array([[np.cos(60 * RADIAN), 0, -np.sin(60 * RADIAN), 0],
+        light_rotation_2 = np.array([[np.cos(30 * RADIAN), 0, -np.sin(30 * RADIAN), 0],
                                      [0, 1, 0, 0],
-                                     [0, np.sin(60 * RADIAN), np.cos(60 * RADIAN), 0],
+                                     [np.sin(30 * RADIAN), 0, np.cos(30 * RADIAN), 0],
                                      [0, 0, 0, 1]])
         light_position = np.dot(light_rotation_1, light_rotation_2)
         self.scene.add(light, pose=light_position)
@@ -41,7 +42,7 @@ class OnlineVisualizer:
         self.surfaces = surfaces
 
     def render(self, vertices, pause=None):
-        m = trimesh.Trimesh(vertices=vertices, faces=self.surfaces)
+        m = trimesh.Trimesh(vertices=vertices, faces=self.surfaces, vertex_colors=[0.5, 0.5, 0.5])
         mesh = pyrender.Mesh.from_trimesh(m, smooth=True)
         obj = self.scene.add(mesh, pose=self.object_pose)
         color, _ = self.r.render(self.scene)
@@ -50,6 +51,14 @@ class OnlineVisualizer:
             plt.waitforbuttonpress()
         else:
             plt.pause(pause)
+        self.scene.remove_node(obj)
+
+    def save(self, vertices, path):
+        m = trimesh.Trimesh(vertices=vertices, faces=self.surfaces, vertex_colors=[0.5, 0.5, 0.5])
+        mesh = pyrender.Mesh.from_trimesh(m, smooth=True)
+        obj = self.scene.add(mesh, pose=self.object_pose)
+        color, _ = self.r.render(self.scene)
+        cv2.imwrite(path, color)
         self.scene.remove_node(obj)
 
     def release(self):
