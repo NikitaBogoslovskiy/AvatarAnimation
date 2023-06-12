@@ -6,8 +6,9 @@ from FLAME.config import get_config
 from progress.bar import Bar
 from FLAME.flame_model import RADIAN
 from FLAME.utils import upload_masks
+from video_animation.visualizer.online_visualizer import OnlineVisualizer
 
-JAW_ARTICULATION_PROBABILITY = 0.1
+JAW_ARTICULATION_PROBABILITY = 0.15
 
 
 class DatasetParams:
@@ -52,7 +53,7 @@ class Dataset:
         return data_item["vertices"], data_item["landmarks"]
 
     @staticmethod
-    def generate(params, cuda=True, batch_size=8):
+    def generate(params, cuda=True, batch_size=500):
         model = FlameModel(get_config(batch_size), cuda)
         num_batches = params.num_samples // batch_size
         num_items = num_batches * batch_size
@@ -60,7 +61,7 @@ class Dataset:
         bar = Bar('Generated data items', max=num_items, check_tty=False)
         shape = torch.zeros(num_items, model.config.shape_params)
         pose = torch.zeros(num_items, model.config.pose_params)
-        pose[:, 3] = torch.clip(torch.normal(mean=0.0 * RADIAN, std=2.5 * RADIAN, size=(num_items,)), min=params.jaw_min, max=params.jaw_max)
+        pose[:, 3] = torch.clip(torch.abs(torch.normal(mean=0.0 * RADIAN, std=4 * RADIAN, size=(num_items,))), min=params.jaw_min, max=params.jaw_max)
         pose[:, 3] *= (torch.rand(num_items) < JAW_ARTICULATION_PROBABILITY)
         expr = torch.rand(num_items, model.config.expression_params) * (params.expr_max - params.expr_min) \
                + params.expr_min
@@ -73,6 +74,8 @@ class Dataset:
             expr = expr.cuda()
         global_item_idx = 1
 
+        v = OnlineVisualizer()
+        v.set_surfaces(model.flamelayer.faces)
         print("Started generating dataset")
         for batch_idx in range(num_batches):
             start_idx = batch_idx * batch_size
@@ -89,6 +92,9 @@ class Dataset:
                 right_eye_region = all_vertices[:, masks.right_eye_region].numpy().squeeze().tolist()
                 nose = all_vertices[:, masks.nose].numpy().squeeze().tolist()
                 lips = all_vertices[:, masks.lips].numpy().squeeze().tolist()
+                # for local_item_idx in range(1, 50):
+                #     v.save(all_vertices[local_item_idx].numpy().squeeze(), f"{PROJECT_DIR}/video_animation/dataset/imgs/{global_item_idx}_{torch.min(expr[local_item_idx])}_{torch.max(expr[local_item_idx])}.jpg")
+                #     global_item_idx += 1
                 for local_item_idx in range(1, batch_size):
                     Dataset.save(f"{params.save_folder}/{global_item_idx}.json",
                                  forehead=forehead[local_item_idx],
@@ -120,10 +126,10 @@ class Dataset:
 
 
 if __name__ == "__main__":
-    p = DatasetParams(save_folder=f"{PROJECT_DIR}/video_animation/dataset/train_data_4",
-                      num_samples=100000,
-                      expr_min=-3,
-                      expr_max=3,
+    p = DatasetParams(save_folder=f"{PROJECT_DIR}/video_animation/dataset/train_data_5",
+                      num_samples=100001,
+                      expr_min=-2.5,
+                      expr_max=2.75,
                       jaw_min=0.0 * RADIAN,
-                      jaw_max=20 * RADIAN)
+                      jaw_max=14 * RADIAN)
     Dataset.generate(p, batch_size=500)
