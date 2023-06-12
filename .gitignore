@@ -165,6 +165,7 @@ video_animation/dataset/train_data_0/*
 video_animation/dataset/train_data_2/*
 video_animation/dataset/train_data_3/*
 video_animation/dataset/train_data_5/*
+video_animation/dataset/imgs/*
 video_animation/detector/shape_predictor.dat
 
 audio_animation/deepspeech/models/*
