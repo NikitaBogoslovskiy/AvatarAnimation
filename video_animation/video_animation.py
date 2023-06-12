@@ -33,7 +33,7 @@ class VideoAnimation:
         self.logging = logging
         self.video_model = VideoModel(self.cuda)
         self.video_model.load_model(
-            weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_1_98800_12.06.2023-01.09.15.pt")
+            weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_1_98800_12.06.2023-03.05.35.pt")
         self.landmarks_sum = np.zeros((68, 2))
         self.landmarks_history = deque()
         self.local_counter = 0

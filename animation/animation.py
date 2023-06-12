@@ -1,5 +1,4 @@
 import math
-
 from progress.bar import Bar
 import cv2
 from animation.concurrent.video_animation import VideoAnimationParams, video_animation_pipeline
@@ -20,7 +19,7 @@ from config.paths import PROJECT_DIR
 class Animation:
     def __init__(self,
                  cuda=True,
-                 audio_support_level=0.5):
+                 audio_support_level=0.8):
         self.cuda = cuda
         self.audio_support_level = audio_support_level
         self.video_animation_params = None
