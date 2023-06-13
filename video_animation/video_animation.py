@@ -33,7 +33,7 @@ class VideoAnimation:
         self.logging = logging
         self.video_model = VideoModel(self.cuda)
         self.video_model.load_model(
-            weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_1_98800_12.06.2023-03.05.35.pt")
+            weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_1_98800_12.06.2023-06.01.06.pt")
         self.landmarks_sum = np.zeros((68, 2))
         self.landmarks_history = deque()
         self.local_counter = 0
@@ -91,10 +91,6 @@ class VideoAnimation:
     def init_concurrent_mode(self, processes_number=8):
         if self.logging:
             print("Initializing concurrent mode... ", end='')
-        self.repeated_human_neutral_landmarks = torch.Tensor(self.neutral_landmarks)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
-        if self.cuda:
-            self.repeated_human_neutral_landmarks = self.repeated_human_neutral_landmarks.cuda()
-        self.landmarks_list = [torch.Tensor(self.neutral_landmarks)[None,]] * self.offline_mode_batch_size
         self.processes_number = processes_number
         self.repeated_model_neutral_landmarks = self.video_model.neutral_landmarks[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
         self.repeated_vertices = torch.Tensor(self.video_model.neutral_vertices)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
@@ -135,8 +131,6 @@ class VideoAnimation:
             self.repeated_human_neutral_landmarks = self.repeated_human_neutral_landmarks.cuda()
         self.repeated_model_neutral_landmarks = self.video_model.neutral_landmarks[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
         self.repeated_vertices = torch.Tensor(self.video_model.neutral_vertices)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
-        # if self.cuda:
-        #     self.repeated_vertices = self.repeated_vertices.cuda()
         self.landmarks_list = [torch.zeros_like(torch.Tensor(self.neutral_landmarks)[None,])] * self.offline_mode_batch_size
         self.frames = [None] * self.offline_mode_batch_size
         if self.logging:
@@ -171,6 +165,13 @@ class VideoAnimation:
                 landmarks = self.detector.detect_landmarks()
                 self.neutral_landmarks = align_landmarks(landmarks)
                 break
+        self._set_repeated_human_neutral_landmarks()
+
+    def _set_repeated_human_neutral_landmarks(self):
+        self.repeated_human_neutral_landmarks = torch.Tensor(self.neutral_landmarks)[None, :, :].repeat(self.offline_mode_batch_size, 1, 1)
+        if self.cuda:
+            self.repeated_human_neutral_landmarks = self.repeated_human_neutral_landmarks.cuda()
+        self.landmarks_list = [torch.Tensor(self.neutral_landmarks)[None, ]] * self.offline_mode_batch_size
 
     def _set_pre_weights_offline(self):
         pre_weights_list = []
@@ -219,7 +220,9 @@ class VideoAnimation:
                     break
             cv2.destroyAllWindows()
         else:
-            neutral_face_image = self._capture_neutral_face_from_photo(photo_path)
+            if not os.path.isfile(photo_path):
+                raise FileNotFoundError("Photo path is incorrect")
+            neutral_face_image = cv2.imread(photo_path)
             self.detector.get_image(neutral_face_image)
             box_found, rect = self.detector.detect_face()
             if box_found:
@@ -231,27 +234,7 @@ class VideoAnimation:
             else:
                 print("Error: cannot find face on photo")
                 exit(-1)
-
-    def _capture_neutral_face_from_video(self):
-        enter_pressed = False
-        while True:
-            ret, frame = self.video_stream.read()
-            self.detector.get_image(frame)
-            found, rect = self.detector.detect_face()
-            if found:
-                self.detector.visualize_bounding_box()
-            cv2.imshow('Press "Enter" to capture neutral face', self.detector.image)
-            if cv2.waitKey(1) == 13:
-                enter_pressed = True
-            if enter_pressed and found:
-                return frame
-
-    @staticmethod
-    def _capture_neutral_face_from_photo(photo_path):
-        if not os.path.isfile(photo_path):
-            raise FileNotFoundError("Photo path is incorrect")
-        photo = cv2.imread(photo_path)
-        return photo
+            self._set_repeated_human_neutral_landmarks()
 
     def process_frame(self):
         ret, frame = self.video_stream.read()
@@ -359,7 +342,7 @@ class VideoAnimation:
                     landmarks_tensor[landmarks_idx] = torch.sum(torch.cat(list(self.last_landmarks)) * self.pre_weights, dim=0)
                     self.last_landmarks[-1] = landmarks_tensor[landmarks_idx][None, :]
             difference_tensor = landmarks_tensor - self.repeated_human_neutral_landmarks[:, :, :2]
-            # difference_tensor[:, MOUTH_LANDMARKS] *= 1.0
+            difference_tensor[:, MOUTH_LANDMARKS] *= 1.15
             left_eye_dirs, right_eye_dirs, nose_mouth_dirs = divide_landmarks_batch(difference_tensor)
             if self.cuda:
                 left_eye_dirs = left_eye_dirs.cuda()
