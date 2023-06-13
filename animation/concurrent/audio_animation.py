@@ -6,25 +6,26 @@ class AudioAnimationParams:
     def __init__(self,
                  cuda=True,
                  audio_path=None,
-                 audio_features=None,
                  target_frame_rate=None,
+                 target_frames_number=None,
                  origin_frame_rate=50):
         self.cuda = cuda
         self.audio_path = audio_path
-        self.audio_features = audio_features
         self.target_frame_rate = target_frame_rate
+        self.target_frames_number = target_frames_number
         self.origin_frame_rate = origin_frame_rate
 
 
 def audio_animation_pipeline(params: AudioAnimationParams, output_queue):
     animation = AudioAnimation(cuda=params.cuda, logging=False)
-    animation.set_audio(audio_path=params.audio_path, audio_features=params.audio_features)
+    animation.set_audio(audio_path=params.audio_path)
     processed_features = animation.audio_model.execute(animation.execution_params)
     need_adaptation = True
     if params.target_frame_rate == params.origin_frame_rate:
         need_adaptation = False
-    step_size = params.origin_frame_rate / params.target_frame_rate
-    relative_current_position = step_size / 2
+    supposed_origin_frames_number = params.origin_frame_rate * (params.target_frames_number / params.target_frame_rate)
+    step_size = (supposed_origin_frames_number - 1) / (params.target_frames_number - 1)
+    relative_current_position = 0
     left_item = None
     frame_idx = 0
     while True:
@@ -41,12 +42,12 @@ def audio_animation_pipeline(params: AudioAnimationParams, output_queue):
         while relative_current_position < current_batch_size:
             left_idx = math.floor(relative_current_position)
             right_idx = left_idx + 1
-            if right_idx >= current_batch_size:
+            fractional_part = relative_current_position - left_idx
+            if right_idx >= current_batch_size and fractional_part != 0:
                 left_item = output_vertices[left_idx]
                 break
             if left_idx >= 0:
                 left_item = output_vertices[left_idx]
-            fractional_part = relative_current_position - left_idx
             if fractional_part == 0:
                 output_queue.put((frame_idx, left_item))
             else:
