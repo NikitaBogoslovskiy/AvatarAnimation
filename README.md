@@ -37,11 +37,11 @@ video_animation_online()  # this will start video animation in real-time
 Note that this type of animation requires some camera that provides real-time video stream (i.e., web camera). 
 Firstly, you will see the window with your face - you need to make a neutral facial expression and press 'Enter'. 
 
-![](https://github.com/NikitaBogoslovskiy/AvatarAnimation/blob/master/other_data/readme_files/neutral_face.png)
+![](https://github.com/NikitaBogoslovskiy/AvatarAnimation/blob/dev/other_data/readme_files/neutral_face.png?raw=true)
 
 Then you will observe two windows: one with your face, another with a character which is being animated in real-time. You can control character animation with your facial expressions. 
 
-![](https://github.com/NikitaBogoslovskiy/AvatarAnimation/blob/master/other_data/readme_files/online_video_animation.png)
+![](https://github.com/NikitaBogoslovskiy/AvatarAnimation/blob/dev/other_data/readme_files/online_video_animation.png?raw=true)
 
 #### Offline mode
 ```python
@@ -51,7 +51,7 @@ This type of animation works with pre-recorded video so you need to specify the 
 
 The result of animation will be saved to the same directory with name "<origin_video_name>_output.mp4" and look like:
 
-![](https://github.com/NikitaBogoslovskiy/AvatarAnimation/blob/master/other_data/readme_files/offline_video_animation.gif)
+![](https://github.com/NikitaBogoslovskiy/AvatarAnimation/blob/dev/other_data/readme_files/offline_video_animation.gif?raw=true)
 
 ### Audio animation
 ```python
@@ -61,7 +61,7 @@ Audio animation takes the audio wav-file with human speech and generate animatio
 
 The result of animation will be saved to the same directory with name "<origin_audio_name>.mp4" and look like:
 
-![](https://github.com/NikitaBogoslovskiy/AvatarAnimation/blob/master/other_data/readme_files/audio_animation.gif)
+![](https://github.com/NikitaBogoslovskiy/AvatarAnimation/blob/dev/other_data/readme_files/audio_animation.gif?raw=true)
 
 ### Overall animation
 ```python
