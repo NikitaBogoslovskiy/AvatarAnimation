@@ -138,6 +138,7 @@ class AudioModel:
             yield current_batch_size, output_vertices.cpu().detach()
         yield None, None
 
+    # TODO: Needs interpolation instead of repeating values
     @staticmethod
     def _normalize_sequence_length(lips_positions, lips_landmarks, audio_features):
         max_indices = torch.argmax(audio_features, dim=1)

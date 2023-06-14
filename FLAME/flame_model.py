@@ -2,6 +2,7 @@ import numpy as np
 from FLAME.FLAME import FLAME as flame
 import pyrender
 import trimesh
+from trimesh.exchange.obj import export_obj
 
 RADIAN = np.pi / 180.0
 
@@ -22,6 +23,13 @@ class FlameModel:
         else:
             vertices, landmarks = self.flamelayer(shape, expression, pose, neck, eye)
         return vertices, landmarks
+
+    def _save(self, vertices, filepath):
+        vertex_colors = np.ones([vertices.shape[0], 4]) * [0.3, 0.3, 0.3, 1.0]
+        tri_mesh = trimesh.Trimesh(vertices, self.flamelayer.faces)
+        str_obj = trimesh.exchange.obj.export_obj(tri_mesh)
+        with open(filepath, "w") as f:
+            f.write(str_obj)
 
     def _draw(self, vertices, landmarks=None):
         processed_vertices = vertices.detach().cpu().numpy().squeeze()

@@ -14,13 +14,13 @@ class OfflineVisualizer:
         camera = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
         light = pyrender.DirectionalLight(color=[255, 255, 255], intensity=5)
         self.scene = pyrender.Scene(ambient_light=[.1, .1, .1], bg_color=[1., 1., 1.])
-        light_rotation_1 = np.array([[np.cos(90 * RADIAN), np.sin(90 * RADIAN), 0, 0],
-                                     [-np.sin(90 * RADIAN), np.cos(90 * RADIAN), 0, 0],
+        light_rotation_1 = np.array([[np.cos(45 * RADIAN), np.sin(45 * RADIAN), 0, 0],
+                                     [-np.sin(45 * RADIAN), np.cos(45 * RADIAN), 0, 0],
                                      [0, 0, 1, 0],
                                      [0, 0, 0, 1]])
-        light_rotation_2 = np.array([[np.cos(60 * RADIAN), 0, -np.sin(60 * RADIAN), 0],
+        light_rotation_2 = np.array([[np.cos(30 * RADIAN), 0, -np.sin(30 * RADIAN), 0],
                                      [0, 1, 0, 0],
-                                     [0, np.sin(60 * RADIAN), np.cos(60 * RADIAN), 0],
+                                     [np.sin(30 * RADIAN), 0, np.cos(30 * RADIAN), 0],
                                      [0, 0, 0, 1]])
         light_position = np.dot(light_rotation_1, light_rotation_2)
         self.scene.add(light, pose=light_position)

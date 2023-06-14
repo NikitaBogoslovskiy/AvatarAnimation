@@ -1,5 +1,4 @@
 import math
-
 from progress.bar import Bar
 import cv2
 from animation.concurrent.video_animation import VideoAnimationParams, video_animation_pipeline
@@ -20,7 +19,7 @@ from config.paths import PROJECT_DIR
 class Animation:
     def __init__(self,
                  cuda=True,
-                 audio_support_level=0.5):
+                 audio_support_level=0.8):
         self.cuda = cuda
         self.audio_support_level = audio_support_level
         self.video_animation_params = None
@@ -106,9 +105,9 @@ class Animation:
         input_video.audio.write_audiofile(self.input_audio_path, fps=16000, logger=None)
         audio_features = self.voice_processor.execute(self.input_audio_path)
         self.audio_animation_params.audio_path = self.input_audio_path
-        # self.audio_animation_params.audio_features = torch.Tensor(audio_features)
         self.audio_animation_params.target_frame_rate = video_fps
-        adapted_audio_features = adapt_audio_to_frame_rate(audio_features[0], self.audio_animation_params.target_frame_rate)
+        self.audio_animation_params.target_frames_number = self.frames_number
+        adapted_audio_features = adapt_audio_to_frame_rate(audio_features[0], self.audio_animation_params.target_frame_rate, self.audio_animation_params.target_frames_number)
         blank_features = (torch.argmax(adapted_audio_features, dim=1) == 35).tolist()
         audio_coefficients = self._get_audio_coefficients(blank_features, video_fps)
         audio_model_outputs = Queue()

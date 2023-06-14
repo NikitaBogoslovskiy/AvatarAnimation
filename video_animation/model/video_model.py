@@ -1,5 +1,4 @@
 from datetime import datetime
-
 from config.paths import PROJECT_DIR
 from video_animation.model.video_model_pytorch import VideoModelPyTorch
 from utils.torch_funcs import init_weights
@@ -67,10 +66,10 @@ class VideoModelExecuteParams:
                  left_eye=None,
                  right_eye=None,
                  nose_mouth=None,
-                 expr_min=-2.5,
-                 expr_max=2.5,
+                 expr_min=-2.45,
+                 expr_max=2.7,
                  jaw_min=0.0,
-                 jaw_max=2.0 * RADIAN):
+                 jaw_max=13.0 * RADIAN):
         self.left_eye = left_eye
         self.right_eye = right_eye
         self.nose_mouth = nose_mouth
@@ -147,7 +146,7 @@ class VideoModel:
         item_names = next(walk(params.dataset_path), (None, None, []))[2]
         item_names_set = set(item_names)
         item_names_set.remove("neutral.json")
-        item_names = list(item_names_set)
+        item_names = list(filter(lambda x: x.endswith(".json"), item_names_set))
         del item_names_set
         random.shuffle(item_names)
         num_items = len(item_names)
@@ -326,7 +325,7 @@ class VideoModel:
 if __name__ == "__main__":
     pass
     params = VideoModelTrainParams(
-        dataset_path=f"{PROJECT_DIR}/video_animation/dataset/train_data_4",
+        dataset_path=f"{PROJECT_DIR}/video_animation/dataset/train_data_5",
         output_weights_path=f"{PROJECT_DIR}/video_animation/weights",
         train_percentage=0.99,
         epoch_number=1,
