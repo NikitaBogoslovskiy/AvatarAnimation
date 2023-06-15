@@ -9,7 +9,7 @@ This is a student project which allows you to animate the face of a character wi
 ## Installation
 The project was developed and tested on Windows 10 using Python 3.9 and packet manager pip.
 
-First of all, you need to install PyTorch framework. In order to do that you should follow the [link](https://pytorch.org/get-started/locally/) and choose parameters of installation, in particular:
+Firstly you need to install PyTorch framework. In order to do that you should follow the [link](https://pytorch.org/get-started/locally/) and choose parameters of installation, in particular:
 * PyTorch Build - Stable
 * Your OS - Windows
 * Package - Pip

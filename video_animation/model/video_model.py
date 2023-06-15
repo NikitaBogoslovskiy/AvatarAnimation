@@ -323,7 +323,6 @@ class VideoModel:
 
 
 if __name__ == "__main__":
-    pass
     params = VideoModelTrainParams(
         dataset_path=f"{PROJECT_DIR}/video_animation/dataset/train_data",
         output_weights_path=f"{PROJECT_DIR}/video_animation/weights",
