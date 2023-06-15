@@ -76,4 +76,4 @@ class Dataset:
 
 if __name__ == "__main__":
     Dataset.generate(video_folder=f"{PROJECT_DIR}/audio_animation/dataset/raw_data",
-                     save_folder=f"D:/thesis/dataset/train_data_5")
+                     save_folder=f"{PROJECT_DIR}/audio_animation/dataset/train_data")

@@ -126,8 +126,8 @@ class Dataset:
 
 
 if __name__ == "__main__":
-    p = DatasetParams(save_folder=f"{PROJECT_DIR}/video_animation/dataset/train_data_5",
-                      num_samples=100001,
+    p = DatasetParams(save_folder=f"{PROJECT_DIR}/video_animation/dataset/train_data",
+                      num_samples=100000,
                       expr_min=-2.5,
                       expr_max=2.75,
                       jaw_min=0.0 * RADIAN,

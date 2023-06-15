@@ -25,7 +25,6 @@ class FlameModel:
         return vertices, landmarks
 
     def _save(self, vertices, filepath):
-        vertex_colors = np.ones([vertices.shape[0], 4]) * [0.3, 0.3, 0.3, 1.0]
         tri_mesh = trimesh.Trimesh(vertices, self.flamelayer.faces)
         str_obj = trimesh.exchange.obj.export_obj(tri_mesh)
         with open(filepath, "w") as f:

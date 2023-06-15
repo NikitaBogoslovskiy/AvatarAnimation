@@ -34,6 +34,6 @@ class VideoProcessor:
 
 
 if __name__ == "__main__":
-    VideoProcessor.split_videos_with_intervals(input_directory="D:/thesis/dataset/input",
+    VideoProcessor.split_videos_with_intervals(input_directory="",
                                                output_directory=f"{PROJECT_DIR}/audio_animation/dataset/raw_data",
                                                interval=8)
