@@ -55,5 +55,3 @@ def audio_animation_pipeline(params: AudioAnimationParams, output_queue):
             frame_idx += 1
             relative_current_position += step_size
         relative_current_position -= current_batch_size
-
-

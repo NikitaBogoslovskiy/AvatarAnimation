@@ -17,7 +17,7 @@ class AudioAnimation:
         self.voice_processor = VoiceProcessor(cuda)
         self.cuda = cuda
         self.audio_model = AudioModel(self.cuda)
-        self.audio_model.load_model(weights_path=f"{PROJECT_DIR}/audio_animation/weights/audio_model_80_798_13.05.2023-13.51.50.pt")
+        self.audio_model.load_model(weights_path=f"{PROJECT_DIR}/audio_animation/weights/audio_model_weights.pt")
         self.output_video_path_without_audio = None
         self.output_video_path_with_audio = None
         self.audio_path = None

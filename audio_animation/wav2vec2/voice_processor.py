@@ -1,4 +1,3 @@
-from config.paths import PROJECT_DIR
 import torch
 from transformers import AutoModelForCTC
 import librosa
@@ -19,5 +18,4 @@ class VoiceProcessor:
 
 
 if __name__ == "__main__":
-    vp = VoiceProcessor()
-    output = vp.execute(f"{PROJECT_DIR}/other_data/input_audios/1.wav")
+    pass

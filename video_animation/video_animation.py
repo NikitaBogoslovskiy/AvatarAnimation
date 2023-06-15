@@ -33,7 +33,7 @@ class VideoAnimation:
         self.logging = logging
         self.video_model = VideoModel(self.cuda)
         self.video_model.load_model(
-            weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_1_98800_12.06.2023-06.01.06.pt")
+            weights_path=f"{PROJECT_DIR}/video_animation/weights/video_model_weights (main).pt")
         self.landmarks_sum = np.zeros((68, 2))
         self.landmarks_history = deque()
         self.local_counter = 0
@@ -342,7 +342,7 @@ class VideoAnimation:
                     landmarks_tensor[landmarks_idx] = torch.sum(torch.cat(list(self.last_landmarks)) * self.pre_weights, dim=0)
                     self.last_landmarks[-1] = landmarks_tensor[landmarks_idx][None, :]
             difference_tensor = landmarks_tensor - self.repeated_human_neutral_landmarks[:, :, :2]
-            difference_tensor[:, MOUTH_LANDMARKS] *= 1.15
+            difference_tensor[:, MOUTH_LANDMARKS] *= 1.0
             left_eye_dirs, right_eye_dirs, nose_mouth_dirs = divide_landmarks_batch(difference_tensor)
             if self.cuda:
                 left_eye_dirs = left_eye_dirs.cuda()
@@ -401,7 +401,7 @@ class VideoAnimation:
                     if frame_idx != 0:
                         self.landmarks_list[frame_idx] = self.landmarks_list[frame_idx - 1]
                     else:
-                        self.landmarks_list[frame_idx] = torch.zeros_like(self.neutral_landmarks)
+                        self.landmarks_list[frame_idx] = torch.Tensor(self.neutral_landmarks)[None, ]
                 else:
                     landmarks = self.detector.detect_landmarks()
                     self.landmarks_list[frame_idx] = torch.Tensor(align_landmarks(landmarks))[None, ]

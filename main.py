@@ -36,7 +36,4 @@ def overall_animation_offline(video_path, audio_support_level=0.8):
 
 
 if __name__ == "__main__":
-    # video_animation_online()
-    video_animation_offline(video_path=f"C:/Users/nikit/Pictures/Camera Roll/WIN_20230521_02_06_53_Pro.mp4")
-    # audio_animation_offline(audio_path=f"{PROJECT_DIR}/other_data/input_audios/2.wav")
-    # overall_animation_offline(video_path=f"C:/Users/nikit/Pictures/Camera Roll/WIN_20230521_02_06_53_Pro.mp4", audio_support_level=1.0)
+    pass

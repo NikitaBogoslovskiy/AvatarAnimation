@@ -1,0 +1,14 @@
+progress
+opencv-python
+moviepy
+numpy==1.23.1
+librosa
+transformers
+nltk
+dlib
+pyrender
+trimesh
+matplotlib
+chumpy
+smplx
+imutils

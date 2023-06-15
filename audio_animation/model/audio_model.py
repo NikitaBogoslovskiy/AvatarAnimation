@@ -57,10 +57,10 @@ class AudioModelTrainParams:
 class AudioModelExecuteParams:
     def __init__(self,
                  audio_features=None,
-                 expr_min=-2.3,
-                 expr_max=2.3,
+                 expr_min=-2.45,
+                 expr_max=2.7,
                  jaw_min=0.0,
-                 jaw_max=20 * RADIAN):
+                 jaw_max=13 * RADIAN):
         self.audio_features = audio_features
         self.expr_min = expr_min
         self.expr_max = expr_max
@@ -138,7 +138,6 @@ class AudioModel:
             yield current_batch_size, output_vertices.cpu().detach()
         yield None, None
 
-    # TODO: Needs interpolation instead of repeating values
     @staticmethod
     def _normalize_sequence_length(lips_positions, lips_landmarks, audio_features):
         max_indices = torch.argmax(audio_features, dim=1)
@@ -359,20 +358,20 @@ class AudioModel:
 
 if __name__ == "__main__":
     params = AudioModelTrainParams(
-        dataset_path=f"D:/thesis/dataset/train_data_5",
+        dataset_path=f"{PROJECT_DIR}/audio_animation/dataset/train_data",
         output_weights_path=f"{PROJECT_DIR}/audio_animation/weights",
         train_percentage=0.99,
-        epoch_number=10,
+        epoch_number=100,
         model_batch_size=20,
         flame_batch_size=75,
         sequence_length=375,
         learning_rate=1e-3,
         decay_rate=0.99,
-        decay_frequency=10000,
+        decay_frequency=8000,
         vertices_coefficient=1.0,
         landmarks_coefficient=1.0,
-        vertices_smoothing_coefficient=0.75,
-        landmarks_smoothing_coefficient=0.75,
+        vertices_smoothing_coefficient=0.5,
+        landmarks_smoothing_coefficient=0.5,
         weight_decay=0.0
     )
     audio_model = AudioModel(cuda=True)
