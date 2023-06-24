@@ -7,9 +7,15 @@ This is a student project which allows you to animate the face of a character wi
 
 
 ## Installation
-The project was developed and tested on Windows 10 using Python 3.9 and packet manager pip.
+The project was developed and tested on Windows 10 using Python 3.9 and packet manager Pip.
 
-Firstly you need to install PyTorch framework. In order to do that you should follow the [link](https://pytorch.org/get-started/locally/) and choose parameters of installation, in particular:
+Firstly you need to clone the project to your local machine:
+```bash
+git clone https://github.com/NikitaBogoslovskiy/AvatarAnimation
+cd AvatarAnimation
+```
+
+Then install PyTorch framework. In order to do that you should follow the [link](https://pytorch.org/get-started/locally/) and choose parameters of installation, in particular:
 * PyTorch Build - Stable
 * Your OS - Windows
 * Package - Pip
@@ -18,7 +24,7 @@ Firstly you need to install PyTorch framework. In order to do that you should fo
 
 It will generate the command line which can be used then for installation.
 
-Then you need to install the remaining project dependencies via command:
+Finally you need to install the remaining project dependencies via command:
 
 ```bash
 pip install -r requirements.txt
