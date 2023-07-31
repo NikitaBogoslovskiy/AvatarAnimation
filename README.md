@@ -1,4 +1,4 @@
-# Avatar Animation
+# Using Neural Networks to Mitigate Articulation Challenges in Speech-Driven Lip-Sync Models
 
 This is the repository for the paper "Using Neural Networks to Mitigate Articulation Challenges in Speech-Driven Lip-Sync Models" by Nikita Bogoslovskiy and Michael Yurushkin.
 
